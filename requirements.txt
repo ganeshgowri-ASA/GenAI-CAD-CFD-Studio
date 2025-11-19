@@ -1,0 +1,10 @@
+# AI Core Dependencies
+anthropic>=0.18.0
+opencv-python>=4.9.0
+numpy>=1.24.0
+Pillow>=10.0.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
