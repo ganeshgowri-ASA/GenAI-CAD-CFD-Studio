@@ -1,0 +1,39 @@
+# Solar PV Layout Generator - Requirements
+# GenAI CAD-CFD Studio
+
+# Core Framework
+streamlit>=1.28.0
+
+# Geospatial Libraries
+geopandas>=0.14.0
+shapely>=2.0.0
+folium>=0.15.0
+streamlit-folium>=0.15.0
+
+# Data Processing
+pandas>=2.0.0
+numpy>=1.24.0
+
+# Mapping and Visualization
+matplotlib>=3.7.0
+plotly>=5.17.0
+
+# Date/Time Handling
+python-dateutil>=2.8.2
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: For production sun position calculations
+# pvlib>=0.10.0
+# pysolar>=0.11
+
+# Optional: For advanced geospatial operations
+# rasterio>=1.3.0
+# pyproj>=3.6.0
+
+# Development Tools
+black>=23.0.0
+flake8>=6.0.0
+mypy>=1.5.0
