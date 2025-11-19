@@ -1,0 +1,27 @@
+# GenAI-CAD-CFD-Studio Requirements
+# Project History & Version Control UI Dependencies
+
+# Core Web Framework
+streamlit>=1.28.0
+
+# GitHub API Integration
+PyGithub>=2.1.1
+
+# Date and Time Utilities
+python-dateutil>=2.8.2
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.1
+
+# Data Processing
+pandas>=2.0.0
+
+# Optional: Database Support for Audit Logs
+# sqlalchemy>=2.0.0
+
+# Code Quality
+# ruff>=0.1.0
+# black>=23.0.0
+# mypy>=1.5.0
