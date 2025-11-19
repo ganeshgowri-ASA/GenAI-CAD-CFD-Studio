@@ -1,0 +1,38 @@
+# GenAI CAD CFD Studio - Requirements
+# Agent Configuration and Core Dependencies
+
+# Web Framework
+streamlit>=1.28.0
+
+# Encryption and Security
+cryptography>=41.0.0
+
+# Environment Management
+python-dotenv>=1.0.0
+
+# HTTP Requests
+requests>=2.31.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.12.0
+
+# Type Checking
+mypy>=1.7.0
+
+# Code Quality
+black>=23.11.0
+flake8>=6.1.0
+isort>=5.12.0
+
+# Logging
+coloredlogs>=15.0.1
+
+# Data Processing (for future CAD/CFD features)
+numpy>=1.24.0
+pandas>=2.0.0
+
+# Optional: CAD/CFD specific libraries (can be added as needed)
+# build123d>=0.3.0
+# cadquery>=2.3.0
