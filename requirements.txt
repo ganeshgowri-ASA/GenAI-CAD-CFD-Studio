@@ -1,0 +1,22 @@
+# Core dependencies for GenAI-CAD-CFD-Studio
+# Geospatial module requirements
+
+# Geospatial processing
+shapely>=2.0.0
+geopandas>=0.14.0
+rtree>=1.0.0
+pyproj>=3.6.0
+
+# Scientific computing and optimization
+scipy>=1.11.0
+numpy>=1.24.0
+
+# Visualization
+matplotlib>=3.7.0
+
+# Testing
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: Solar position calculations (can be used as alternative)
+# pvlib>=0.10.0
