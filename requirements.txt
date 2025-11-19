@@ -1,0 +1,11 @@
+# Core dependencies
+pyyaml>=6.0
+streamlit>=1.28.0
+
+# Testing dependencies
+pytest>=7.4.0
+pytest-cov>=4.1.0
+pytest-mock>=3.11.0
+
+# Optional dependencies for extended functionality
+numpy>=1.24.0
