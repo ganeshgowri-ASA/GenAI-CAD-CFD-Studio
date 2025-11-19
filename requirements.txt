@@ -1,0 +1,12 @@
+# Core CAD generation dependencies
+build123d>=0.10.0
+requests>=2.31.0
+python-dotenv>=1.0.0
+
+# Testing dependencies
+pytest>=7.4.0
+pytest-cov>=4.1.0
+
+# Optional: For enhanced functionality
+# numpy>=1.24.0  # Numerical operations
+# cadquery>=2.3.0  # Alternative CAD kernel
