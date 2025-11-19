@@ -1,0 +1,41 @@
+name: Deploy to Streamlit Cloud
+
+on:
+  push:
+    branches:
+      - main
+  workflow_dispatch:
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+
+    - name: Set up Python 3.11
+      uses: actions/setup-python@v4
+      with:
+        python-version: "3.11"
+        cache: 'pip'
+
+    - name: Install dependencies
+      run: |
+        python -m pip install --upgrade pip
+        pip install -r requirements.txt
+
+    - name: Run tests before deployment
+      run: |
+        pytest -v
+
+    - name: Deploy to Streamlit Cloud
+      run: |
+        echo "Streamlit Cloud deployment is configured via the Streamlit Cloud dashboard"
+        echo "This workflow validates the code before deployment"
+        echo "Connect your repository to Streamlit Cloud at: https://streamlit.io/cloud"
+
+    - name: Deployment Status
+      run: |
+        echo "✅ Code validation complete"
+        echo "📦 Ready for Streamlit Cloud deployment"
