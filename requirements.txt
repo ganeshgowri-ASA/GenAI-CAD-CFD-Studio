@@ -42,3 +42,14 @@ python-dotenv>=1.0.0
 # Optional: For enhanced functionality
 # numpy>=1.24.0  # Numerical operations
 # cadquery>=2.3.0  # Alternative CAD kernel
+# GenAI-CAD-CFD-Studio Requirements
+# File Import UI with 3D Preview Dependencies
+streamlit>=1.28.0
+# Visualization
+plotly>=5.18.0
+matplotlib>=3.8.0
+# Scientific computing
+scipy>=1.11.0
+# Optional CAD/CFD format support (install as needed)
+# ezdxf>=1.1.0  # For advanced DXF parsing
+# pythonOCC-core>=7.7.0  # For STEP, IGES, BREP support
