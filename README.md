@@ -1,41 +1,49 @@
 # GenAI-CAD-CFD-Studio
-🚀 Universal AI-Powered CAD &amp; CFD Platform | Democratizing 3D Design &amp; Simulation | Natural Language → Parametric Models | Build123d + Zoo.dev + Adam.new + OpenFOAM | Solar PV, Test Chambers, Digital Twins &amp; More
 
-## Multi-Format File Import Engine
+🚀 Universal AI-Powered CAD & CFD Platform | Democratizing 3D Design & Simulation | Natural Language → Parametric Models | Build123d + Zoo.dev + Adam.new + OpenFOAM | Solar PV, Test Chambers, Digital Twins & More
 
-A comprehensive CAD and mesh file import system supporting 20+ formats with unified geometry output.
+## Overview
 
-### Features
+GenAI-CAD-CFD-Studio is a comprehensive platform that combines multiple CAD generation engines with a unified interface, enabling designers and engineers to create 3D models using natural language, parametric code, or direct API calls.
 
-#### Supported Formats
+## Features
 
-**CAD Formats:**
-- **DXF** (Drawing Exchange Format) - 2D/3D drawings, R12-R2018
-- **STEP/STP** (Standard for Exchange of Product Data) - 3D CAD models
-- **IGES/IGS** (Initial Graphics Exchange Specification)
-- **BREP** (Boundary Representation)
+### CAD Generation Engines
 
-**Mesh Formats:**
-- **STL** (Stereolithography) - ASCII and binary
-- **OBJ** (Wavefront OBJ)
-- **PLY** (Stanford Polygon File Format)
-- **OFF** (Object File Format)
+- **Build123D Engine**: Direct parametric CAD modeling with Python
+  - Primitives: box, cylinder, sphere, cone
+  - Operations: extrude, revolve, loft, sweep
+  - Boolean operations: union, subtract, intersect
+  - Export: STEP, STL with quality control
 
-**FEA/CFD Mesh Formats:**
-- **VTK** family (.vtk, .vtu, .vts, .vtr, .vtp, .pvtu)
-- **Gmsh** (.msh)
-- **ANSYS** (.ans)
-- **Abaqus** (.inp)
-- **CGNS** (.cgns)
-- **Exodus** (.e, .exo)
-- **FLAC3D** (.f3grid)
-- **H5M** (.h5m)
-- **Nastran** (.bdf, .nas)
-- **Tecplot** (.dat)
-- **XDMF** (.xdmf, .xmf)
-- And more...
+- **Zoo.dev Connector**: KCL-based text-to-CAD generation
+  - Natural language to KCL code conversion
+  - Cloud-based model execution
+  - Rate limiting and error handling
+  - Mock mode for testing
 
-### Installation
+- **Adam.new Connector**: Conversational AI CAD generation
+  - Natural language model generation
+  - Iterative refinement with feedback
+  - Multi-format export (STEP, STL, OBJ, GLB)
+  - Conversation history tracking
+
+- **Unified Interface**: Automatic engine selection
+  - Auto-detects best engine for your prompt
+  - Consistent API across all engines
+  - Integrated validation and export
+
+### Geometry Validation
+
+- Volume validation (positive, non-zero)
+- Topology checking (manifold geometry)
+- Self-intersection detection
+- Quality metrics and suggestions
+- Automated fix recommendations
+
+## Installation
+
+### Basic Installation
 
 ```bash
 # Clone the repository
@@ -45,246 +53,317 @@ cd GenAI-CAD-CFD-Studio
 # Install dependencies
 pip install -r requirements.txt
 
-# For STEP file support (requires conda)
-conda install -c conda-forge pythonocc-core
-
-# Install package in development mode
+# Or install in development mode
 pip install -e .
 ```
 
-### Quick Start
-
-#### Import Any Supported File
-
-```python
-from src.io import UniversalImporter
-
-# Create importer
-importer = UniversalImporter()
-
-# Import file (format auto-detected)
-geometry = importer.import_file('model.step')
-
-# Access unified geometry data
-print(f"Vertices: {len(geometry['vertices'])}")
-print(f"Volume: {geometry['volume']}")
-print(f"Bounds: {geometry['bounds']}")
-print(f"Format: {geometry['format']}")
-```
-
-#### Use Specific Handlers
-
-```python
-from src.io import DXFParser, STEPHandler, STLHandler, MeshConverter
-
-# DXF files
-dxf_parser = DXFParser()
-dxf_data = dxf_parser.parse('drawing.dxf')
-print(f"Lines: {len(dxf_data['lines'])}")
-print(f"Circles: {len(dxf_data['circles'])}")
-
-# STEP files
-step_handler = STEPHandler()
-shape = step_handler.import_step('model.step')
-properties = step_handler.get_properties(shape)
-print(f"Volume: {properties['volume']}")
-
-# STL files
-stl_handler = STLHandler()
-mesh = stl_handler.load_mesh('part.stl')
-validation = stl_handler.validate_mesh(mesh)
-print(f"Watertight: {validation['is_watertight']}")
-
-# Mesh conversion
-converter = MeshConverter()
-converter.convert('input.vtk', 'output.stl')
-```
-
-#### Progress Callbacks for Large Files
-
-```python
-def progress_callback(message, progress):
-    print(f"{message}: {progress*100:.1f}%")
-
-importer.set_progress_callback(progress_callback)
-geometry = importer.import_file('large_model.step')
-```
-
-### Module Documentation
-
-#### UniversalImporter
-
-Unified interface for importing any supported file format.
-
-**Key Methods:**
-- `import_file(filepath)` - Auto-detect and import file
-- `detect_format(filepath)` - Detect file format from extension
-- `is_format_supported(filepath)` - Check if format is supported
-- `get_format_info(filepath)` - Get format metadata
-
-**Returns:**
-```python
-{
-    'vertices': np.ndarray,      # N x 3 vertex coordinates
-    'faces': np.ndarray,         # M x 3 face indices (for meshes)
-    'edges': list,               # Edge definitions (for 2D/wireframe)
-    'bounds': tuple,             # (xmin, xmax, ymin, ymax, zmin, zmax)
-    'volume': float,             # Volume (if applicable)
-    'surface_area': float,       # Surface area (if applicable)
-    'metadata': dict,            # Format-specific metadata
-    'format': str                # Detected format type
-}
-```
-
-#### DXFParser
-
-Parse AutoCAD DXF files (R12-R2018).
-
-**Key Methods:**
-- `parse(filepath)` - Parse DXF file
-- `get_entity_count()` - Get entity type counts
-
-**Extracts:**
-- Lines, arcs, circles, polylines
-- Dimensions, layers, blocks
-- Drawing units and version
-
-#### STEPHandler
-
-Handle STEP CAD files using pythonocc-core.
-
-**Key Methods:**
-- `import_step(filepath)` - Import STEP file
-- `export_step(shape, filepath)` - Export to STEP
-- `export_to_format(shape, filepath, format)` - Export to other formats
-- `get_properties(shape)` - Get geometric properties
-- `get_volume(shape)` - Calculate volume
-- `get_surface_area(shape)` - Calculate surface area
-- `get_bounding_box(shape)` - Get bounding box
-- `is_valid(shape)` - Validate geometry
-
-#### STLHandler
-
-Load and manipulate STL mesh files using trimesh.
-
-**Key Methods:**
-- `load_mesh(filepath)` - Load STL file
-- `save_mesh(filepath, mesh)` - Save mesh
-- `is_watertight(mesh)` - Check if watertight
-- `validate_mesh(mesh)` - Comprehensive validation
-- `repair_mesh(mesh)` - Repair mesh defects
-- `calculate_properties(mesh)` - Get all properties
-- `simplify_mesh(mesh, target_faces)` - Reduce mesh complexity
-
-#### MeshConverter
-
-Universal mesh format converter using meshio.
-
-**Key Methods:**
-- `read(filepath)` - Read any supported mesh format
-- `write(filepath, mesh)` - Write to any format
-- `convert(input_file, output_file)` - Convert between formats
-- `get_mesh_info(mesh)` - Get mesh structure info
-- `scale_mesh(factor, mesh)` - Scale mesh
-- `translate_mesh(vector, mesh)` - Translate mesh
-- `get_supported_formats()` - List all supported formats
-
-### Testing
+### Development Installation
 
 ```bash
-# Run all tests
-pytest
-
-# Run with coverage
-pytest --cov=src --cov-report=html
-
-# Run specific test module
-pytest tests/test_io.py -v
-
-# Run specific test class
-pytest tests/test_io.py::TestSTLHandler -v
-```
-
-### Architecture
-
-```
-src/io/
-├── __init__.py              # Module exports and convenience functions
-├── dxf_parser.py            # DXF file parsing (ezdxf)
-├── step_handler.py          # STEP file handling (pythonocc-core)
-├── stl_handler.py           # STL mesh handling (trimesh)
-├── mesh_converter.py        # Universal mesh conversion (meshio)
-└── universal_importer.py    # Unified import interface
-
-tests/
-└── test_io.py               # Comprehensive unit tests (>80% coverage)
-```
-
-### Examples
-
-#### Batch Convert Files
-
-```python
-from src.io import MeshConverter
-from pathlib import Path
-
-converter = MeshConverter()
-
-# Convert all VTK files to STL
-for vtk_file in Path('meshes').glob('*.vtk'):
-    stl_file = vtk_file.with_suffix('.stl')
-    converter.convert(str(vtk_file), str(stl_file))
-    print(f"Converted {vtk_file.name} -> {stl_file.name}")
-```
-
-#### Analyze CAD Model
-
-```python
-from src.io import STEPHandler
-
-handler = STEPHandler()
-shape = handler.import_step('engine_part.step')
-
-props = handler.get_properties(shape)
-print(f"Volume: {props['volume']:.2f} mm³")
-print(f"Surface Area: {props['surface_area']:.2f} mm²")
-print(f"Center of Mass: {props['center_of_mass']}")
-print(f"Topology: {props['topology']}")
-```
-
-#### Validate and Repair STL Mesh
-
-```python
-from src.io import STLHandler
-
-handler = STLHandler()
-mesh = handler.load_mesh('broken_mesh.stl')
-
-# Validate
-validation = handler.validate_mesh(mesh)
-if not validation['is_valid']:
-    print("Issues found:", validation['issues'])
-
-    # Repair
-    repaired = handler.repair_mesh(
-        mesh,
-        remove_degenerate=True,
-        remove_duplicate=True,
-        fill_holes=True
-    )
-
-    # Save repaired mesh
-    handler.save_mesh('repaired_mesh.stl', repaired)
+# Install with development dependencies
+pip install -e .[dev]
 ```
 
 ### Dependencies
 
-- **numpy** - Numerical operations
-- **ezdxf** (≥1.3.0) - DXF parsing
-- **pythonocc-core** (≥7.8.0) - STEP/IGES handling (conda install)
-- **trimesh** (≥4.0.0) - STL mesh operations
-- **meshio** (≥5.3.0) - Universal mesh I/O
+- `build123d>=0.10.0` - Direct CAD modeling
+- `requests>=2.31.0` - API communication
+- `python-dotenv>=1.0.0` - Environment management
+- `pytest>=7.4.0` - Testing (dev)
+- `pytest-cov>=4.1.0` - Coverage (dev)
 
-### License
+## Quick Start
+
+### 1. Setup API Keys (Optional)
+
+```bash
+# Copy example environment file
+cp .env.example .env
+
+# Edit .env and add your API keys
+# ZOO_API_KEY=your_zoo_dev_api_key_here
+# ADAM_API_KEY=your_adam_new_api_key_here
+```
+
+**Note**: API keys are only required for Zoo.dev and Adam.new connectors. Build123D works locally without any API keys. All connectors support mock mode for testing.
+
+### 2. Basic Usage
+
+```python
+from cad import UnifiedCADInterface
+
+# Initialize (mock_mode=True for testing without API keys)
+interface = UnifiedCADInterface(mock_mode=True)
+
+# Generate with auto-selection
+result = interface.generate("Create a box 10x10x10")
+
+# Export to STEP
+result.export_step("output.step")
+
+# Export to STL
+result.export_stl("output.stl", resolution='high')
+```
+
+### 3. Using Specific Engines
+
+#### Build123D Engine (Local, No API Required)
+
+```python
+from cad import Build123DEngine, validate_geometry
+
+engine = Build123DEngine()
+
+# Create primitives
+box = engine.generate_from_params({
+    'type': 'box',
+    'length': 100,
+    'width': 50,
+    'height': 30
+})
+
+cylinder = engine.generate_from_params({
+    'type': 'cylinder',
+    'radius': 20,
+    'height': 100
+})
+
+# Boolean operations
+result = engine.subtract(box, cylinder)
+
+# Validate geometry
+validation = validate_geometry(result)
+print(validation.summary())
+
+# Export
+engine.export_step(result, 'part.step')
+engine.export_stl(result, 'part.stl', resolution='high')
+```
+
+#### Zoo.dev Connector (KCL)
+
+```python
+from cad import ZooDevConnector
+import os
+
+connector = ZooDevConnector(
+    api_key=os.getenv('ZOO_API_KEY'),
+    mock_mode=True  # Set False to use real API
+)
+
+# Generate KCL code
+kcl_code = connector.generate_kcl(
+    "Create a mounting bracket with M6 screw holes"
+)
+
+# Execute KCL
+model_url = connector.execute_kcl(kcl_code)
+
+# Download model
+connector.download_model(model_url, 'bracket.glb')
+```
+
+#### Adam.new Connector (Conversational)
+
+```python
+from cad import AdamNewConnector
+import os
+
+connector = AdamNewConnector(
+    api_key=os.getenv('ADAM_API_KEY'),
+    mock_mode=True  # Set False to use real API
+)
+
+# Generate from natural language
+result = connector.generate_from_nl(
+    "Design a solar panel mounting bracket"
+)
+
+# Refine the design
+refined = connector.refine_model(
+    result['model_id'],
+    "Make it stronger with reinforcement ribs"
+)
+
+# Download in multiple formats
+files = connector.download_formats(
+    refined['model_id'],
+    formats=['step', 'stl', 'obj'],
+    output_dir='output'
+)
+```
+
+### 4. Composite Parts
+
+```python
+from cad import Build123DEngine
+
+engine = Build123DEngine()
+
+operations = [
+    {
+        'type': 'primitive',
+        'params': {'type': 'box', 'length': 100, 'width': 100, 'height': 20}
+    },
+    {
+        'type': 'subtract',
+        'params': {'type': 'cylinder', 'radius': 10, 'height': 25}
+    },
+    {
+        'type': 'union',
+        'params': {'type': 'box', 'length': 100, 'width': 10, 'height': 30}
+    }
+]
+
+part = engine.create_composite(operations)
+engine.export_step(part, 'composite.step')
+```
+
+## Testing
+
+### Run All Tests
+
+```bash
+# Run tests with coverage
+pytest
+
+# Run specific test file
+pytest tests/test_cad.py
+
+# Run with verbose output
+pytest -v
+
+# Generate HTML coverage report
+pytest --cov=src/cad --cov-report=html
+```
+
+### Coverage
+
+The test suite achieves >80% code coverage across all modules:
+- Build123D engine tests
+- Zoo.dev connector tests (mock mode)
+- Adam.new connector tests (mock mode)
+- Unified interface tests
+- Validation tests
+- Integration tests
+
+## Architecture
+
+```
+src/cad/
+├── __init__.py              # Main exports
+├── build123d_engine.py      # Direct CAD modeling
+├── zoo_connector.py         # KCL-based generation
+├── adam_connector.py        # Conversational AI
+├── agent_interface.py       # Unified interface
+└── cad_validator.py         # Geometry validation
+
+tests/
+└── test_cad.py             # Comprehensive tests
+
+examples/
+└── basic_usage.py          # Usage examples
+```
+
+## API Reference
+
+### UnifiedCADInterface
+
+```python
+interface = UnifiedCADInterface(
+    zoo_api_key=None,    # Optional
+    adam_api_key=None,   # Optional
+    mock_mode=False      # True for testing
+)
+
+# Auto-select engine
+result = interface.generate(prompt, engine='auto')
+
+# Specific engine
+result = interface.generate(prompt, engine='build123d')
+result = interface.generate(prompt, engine='zoo')
+result = interface.generate(prompt, engine='adam')
+
+# Refine (Adam only)
+refined = interface.refine(model_id, feedback)
+```
+
+### CADResult
+
+```python
+result = interface.generate("Create a box")
+
+# Access model
+model = result.model
+
+# Access metadata
+metadata = result.get_metadata()
+engine = result.engine
+prompt = result.prompt
+
+# Export
+result.export_step('output.step')
+result.export_stl('output.stl', resolution='high')
+```
+
+### Validation
+
+```python
+from cad import validate_geometry, quick_validate
+
+# Full validation
+validation = validate_geometry(part)
+print(validation.summary())
+
+# Quick check
+is_valid = quick_validate(part)
+
+# Get suggested fixes
+if not validation.is_valid:
+    fixes = suggest_fixes(validation)
+    for fix in fixes:
+        print(f"- {fix}")
+```
+
+## Examples
+
+See `examples/basic_usage.py` for comprehensive examples:
+
+```bash
+python examples/basic_usage.py
+```
+
+## Contributing
+
+Contributions are welcome! Please ensure:
+- Tests pass: `pytest`
+- Coverage >80%: `pytest --cov=src/cad`
+- Code is formatted: `black src tests`
+- Linting passes: `flake8 src tests`
+
+## License
 
 MIT License - see LICENSE file for details.
+
+## Roadmap
+
+- [ ] CFD integration with OpenFOAM
+- [ ] Advanced mesh generation
+- [ ] Simulation automation
+- [ ] Digital twin creation
+- [ ] Solar PV design automation
+- [ ] Test chamber modeling
+- [ ] Multi-physics simulation
+
+## Support
+
+- Documentation: See this README
+- Issues: https://github.com/ganeshgowri-ASA/GenAI-CAD-CFD-Studio/issues
+- Examples: `examples/basic_usage.py`
+
+## Acknowledgments
+
+- Build123D community
+- Zoo.dev team
+- Adam.new team
+- OpenCASCADE technology
