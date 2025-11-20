@@ -564,5 +564,21 @@ def render_results_visualization(wizard: SimulationWizard):
             st.success("Report generation initiated!")
 
 
+def render():
+    """Render function for tab integration"""
+    # For now, call the main function directly
+    # In future, this can be refactored to work better within tabs
+    st.header('🌊 CFD Analysis Studio')
+
+    st.markdown(
+        """
+        Run computational fluid dynamics simulations with AI-assisted setup.
+        """
+    )
+
+    # Placeholder for now
+    st.info("🚧 CFD Analysis UI is being integrated. Core functionality available through main() function.")
+
+
 if __name__ == "__main__":
     main()

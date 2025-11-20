@@ -1,5 +1,6 @@
 """UI Package - Streamlit Application Components"""
 
-from src.ui.app import main
+# Import removed to prevent circular dependencies
+# Import main directly from src.ui.app when needed
 
-__all__ = ['main']
+__all__ = []

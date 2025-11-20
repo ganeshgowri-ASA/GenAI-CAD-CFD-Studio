@@ -564,6 +564,12 @@ def export_report_txt(geometry: universal_importer.GeometryData, filename: str):
         st.error(f"Error exporting report: {str(e)}")
 
 
+# Wrapper function for tab integration
+def render():
+    """Render function for tab integration"""
+    render_file_import_tab()
+
+
 # Main entry point when run as standalone
 if __name__ == "__main__":
     st.set_page_config(
