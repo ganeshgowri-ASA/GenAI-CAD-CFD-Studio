@@ -1,7 +1,9 @@
 # Core Framework
-streamlit>=1.28.0
+streamlit>=1.51.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
+pandas>=1.4.0
+pillow>=7.1.0
 
 # Testing
 pytest>=7.4.0
