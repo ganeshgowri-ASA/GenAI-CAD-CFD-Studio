@@ -5,6 +5,7 @@ Handles import/export of STEP (Standard for the Exchange of Product model data) 
 using pythonocc-core and aocxchange libraries.
 """
 
+from __future__ import annotations
 from typing import Dict, Any, Optional, Tuple
 from pathlib import Path
 import numpy as np

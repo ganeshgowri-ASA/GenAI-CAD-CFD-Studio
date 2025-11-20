@@ -39,14 +39,15 @@ from .dxf_parser import DXFParser
 from .step_handler import STEPHandler
 from .stl_handler import STLHandler
 from .mesh_converter import MeshConverter
-from .universal_importer import UniversalImporter
+from .universal_importer import GeometryData, parse
 
 __all__ = [
     'DXFParser',
     'STEPHandler',
     'STLHandler',
     'MeshConverter',
-    'UniversalImporter'
+    'GeometryData',
+    'parse'
 ]
 
 __version__ = '1.0.0'
@@ -62,15 +63,14 @@ def import_file(filepath: str, **kwargs):
         **kwargs: Additional arguments passed to the specific parser
 
     Returns:
-        Dictionary with unified geometry data
+        GeometryData object with unified geometry data
 
     Example:
         >>> from src.io import import_file
         >>> geometry = import_file('model.step')
-        >>> print(f"Volume: {geometry['volume']}")
+        >>> print(f"Volume: {geometry.volume}")
     """
-    importer = UniversalImporter()
-    return importer.import_file(filepath, **kwargs)
+    return parse(filepath, **kwargs)
 
 
 def get_supported_formats():
@@ -78,11 +78,11 @@ def get_supported_formats():
     Get list of all supported file formats.
 
     Returns:
-        Dictionary mapping file extension to format category
+        List of supported file extensions
 
     Example:
         >>> from src.io import get_supported_formats
         >>> formats = get_supported_formats()
-        >>> print(formats['stl'])  # Output: 'stl'
+        >>> print(formats)  # Output: ['stl', 'obj', 'ply', 'dxf', ...]
     """
-    return UniversalImporter.get_supported_formats()
+    return ['stl', 'obj', 'ply', 'dxf', 'dwg', 'step', 'stp', 'iges', 'igs', 'brep']

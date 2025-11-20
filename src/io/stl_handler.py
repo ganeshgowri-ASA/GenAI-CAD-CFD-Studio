@@ -5,10 +5,18 @@ Handles loading, validation, and repair of STL (Stereolithography) mesh files
 using the trimesh library.
 """
 
-import trimesh
+from __future__ import annotations
 import numpy as np
-from typing import Dict, Any, Optional, Tuple
+from typing import Dict, Any, Optional, Tuple, TYPE_CHECKING
 from pathlib import Path
+
+try:
+    import trimesh
+    HAS_TRIMESH = True
+except ImportError:
+    HAS_TRIMESH = False
+    if TYPE_CHECKING:
+        import trimesh
 
 
 class STLHandler:
@@ -25,6 +33,11 @@ class STLHandler:
 
     def __init__(self):
         """Initialize STL handler."""
+        if not HAS_TRIMESH:
+            raise ImportError(
+                "trimesh library is required for STL handling. "
+                "Install it with: pip install trimesh"
+            )
         self.mesh = None
 
     def load_mesh(self, filepath: str, **kwargs) -> trimesh.Trimesh:
