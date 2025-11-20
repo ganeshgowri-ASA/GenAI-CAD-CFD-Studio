@@ -68,6 +68,7 @@ opencv-python>=4.9.0
 imageio>=2.31.0
 imageio-ffmpeg>=0.4.9
 colorcet>=3.0.0
+PyPDF2>=3.0.0  # PDF parsing for technical drawings
 
 # ============================================================================
 # Network & API
