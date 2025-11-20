@@ -2,6 +2,7 @@
 
 # Core Framework
 streamlit>=1.51.0
+streamlit-aggrid>=0.3.4
 pyyaml>=6.0
 python-dotenv>=1.0.0
 pandas>=2.0.0
