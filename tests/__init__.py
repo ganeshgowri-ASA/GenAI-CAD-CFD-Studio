@@ -1,1 +1,1 @@
-"""Tests package for GenAI CAD/CFD Studio."""
+"""Test suite for GenAI CAD-CFD Studio."""
