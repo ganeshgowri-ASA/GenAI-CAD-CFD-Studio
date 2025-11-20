@@ -1,174 +1,110 @@
 """
 PyFoam Wrapper Module
-
-Provides OpenFOAM case setup, execution, and monitoring capabilities.
+Interface for running OpenFOAM simulations using PyFoam.
 """
 
-import os
-import shutil
-import subprocess
-import logging
-from typing import Dict, List, Optional, Tuple, Any
+from typing import Dict, List, Optional, Any, Callable
 from pathlib import Path
-import json
+import subprocess
 import time
+from enum import Enum
+import json
 
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
+
+class SolverType(Enum):
+    """OpenFOAM solver types."""
+    SIMPLE_FOAM = "simpleFoam"
+    PIMPLE_FOAM = "pimpleFoam"
+    PISO_FOAM = "pisoFoam"
+    ICOFOAM = "icoFoam"
+    BUOYANT_SIMPLE_FOAM = "buoyantSimpleFoam"
+    BUOYANT_PIMPLE_FOAM = "buoyantPimpleFoam"
+    INTERFOAM = "interFoam"
+    SCALAR_TRANSPORT_FOAM = "scalarTransportFoam"
+
+
+class TurbulenceModel(Enum):
+    """Turbulence model types."""
+    LAMINAR = "laminar"
+    K_EPSILON = "kEpsilon"
+    K_OMEGA_SST = "kOmegaSST"
+    SPALART_ALLMARAS = "SpalartAllmaras"
+    K_OMEGA = "kOmega"
+    REALIZEABLE_K_EPSILON = "realizableKE"
+
+
+class SimulationStatus(Enum):
+    """Simulation status."""
+    NOT_STARTED = "not_started"
+    INITIALIZING = "initializing"
+    RUNNING = "running"
+    CONVERGED = "converged"
+    FAILED = "failed"
+    STOPPED = "stopped"
 
 
 class PyFoamWrapper:
     """
-    OpenFOAM case manager and simulation runner.
+    Wrapper for OpenFOAM simulations using PyFoam.
 
-    This class provides methods to:
-    - Create OpenFOAM case structures
-    - Convert meshes to OpenFOAM format
-    - Set boundary conditions and fluid properties
-    - Run simulations (serial or parallel)
-    - Monitor convergence
+    Features:
+    - Case setup
+    - Solver execution
+    - Real-time monitoring
+    - Convergence checking
+    - Results extraction
     """
 
-    # Standard fluid properties
-    FLUID_PROPERTIES = {
-        "air": {
-            "density": 1.225,  # kg/m^3
-            "kinematic_viscosity": 1.5e-5,  # m^2/s
-            "dynamic_viscosity": 1.8375e-5,  # Pa·s
-        },
-        "water": {
-            "density": 1000.0,  # kg/m^3
-            "kinematic_viscosity": 1.0e-6,  # m^2/s
-            "dynamic_viscosity": 0.001,  # Pa·s
-        },
-        "oil": {
-            "density": 900.0,  # kg/m^3
-            "kinematic_viscosity": 1.0e-4,  # m^2/s
-            "dynamic_viscosity": 0.09,  # Pa·s
-        },
-    }
-
-    # Turbulence models
-    TURBULENCE_MODELS = {
-        "k-epsilon": "kEpsilon",
-        "k-omega-sst": "kOmegaSST",
-        "spalart-allmaras": "SpalartAllmaras",
-        "laminar": "laminar",
-    }
-
-    def __init__(self, openfoam_env: Optional[Dict[str, str]] = None):
+    def __init__(self, case_dir: Path):
         """
-        Initialize PyFoamWrapper.
+        Initialize PyFoam wrapper.
 
         Args:
-            openfoam_env: OpenFOAM environment variables (optional)
+            case_dir: Path to OpenFOAM case directory
         """
-        self.openfoam_env = openfoam_env or {}
-        self._check_openfoam_installation()
+        self.case_dir = Path(case_dir)
+        self.status = SimulationStatus.NOT_STARTED
+        self.process = None
+        self.residuals = {"U": [], "p": [], "k": [], "omega": [], "epsilon": []}
+        self.current_iteration = 0
 
-    def _check_openfoam_installation(self) -> bool:
+    def setup_case_structure(self) -> bool:
         """
-        Check if OpenFOAM is properly installed.
+        Create OpenFOAM case directory structure.
 
         Returns:
-            True if OpenFOAM is found
+            Success status
         """
         try:
-            result = subprocess.run(
-                ["which", "simpleFoam"],
-                capture_output=True,
-                text=True,
-                timeout=5
-            )
-            if result.returncode == 0:
-                logger.info("OpenFOAM installation found")
-                return True
-            else:
-                logger.warning(
-                    "OpenFOAM not found in PATH. "
-                    "Make sure to source OpenFOAM environment before using."
-                )
-                return False
+            # Create main directories
+            (self.case_dir / "0").mkdir(parents=True, exist_ok=True)
+            (self.case_dir / "constant").mkdir(exist_ok=True)
+            (self.case_dir / "system").mkdir(exist_ok=True)
+
+            # Create constant subdirectories
+            (self.case_dir / "constant" / "polyMesh").mkdir(exist_ok=True)
+            (self.case_dir / "constant" / "triSurface").mkdir(exist_ok=True)
+
+            return True
         except Exception as e:
-            logger.warning(f"Could not verify OpenFOAM installation: {str(e)}")
+            print(f"Error creating case structure: {e}")
             return False
 
-    def create_case(
-        self,
-        case_dir: str,
-        solver_type: str = "simpleFoam",
-        template_case: Optional[str] = None
-    ) -> str:
+    def write_control_dict(self, config: Dict[str, Any]) -> bool:
         """
-        Create OpenFOAM case structure.
+        Write controlDict file.
 
         Args:
-            case_dir: Directory for the case
-            solver_type: OpenFOAM solver ('simpleFoam', 'pimpleFoam', etc.)
-            template_case: Path to template case (if any)
+            config: Control dictionary configuration
 
         Returns:
-            Path to created case directory
-
-        Raises:
-            ValueError: If solver type is invalid
+            Success status
         """
-        case_path = Path(case_dir)
-
-        # Create case directory
-        case_path.mkdir(parents=True, exist_ok=True)
-        logger.info(f"Creating OpenFOAM case in: {case_path}")
-
-        # If template provided, copy it
-        if template_case and os.path.exists(template_case):
-            logger.info(f"Copying template case from: {template_case}")
-            for item in os.listdir(template_case):
-                src = os.path.join(template_case, item)
-                dst = os.path.join(case_dir, item)
-                if os.path.isdir(src):
-                    shutil.copytree(src, dst, dirs_exist_ok=True)
-                else:
-                    shutil.copy2(src, dst)
-        else:
-            # Create standard case structure
-            self._create_case_structure(case_path, solver_type)
-
-        return str(case_path)
-
-    def _create_case_structure(self, case_path: Path, solver_type: str):
-        """
-        Create standard OpenFOAM case directory structure.
-
-        Args:
-            case_path: Path to case directory
-            solver_type: Solver type
-        """
-        # Create directories
-        dirs = ["0", "constant", "system"]
-        for d in dirs:
-            (case_path / d).mkdir(exist_ok=True)
-
-        # Create subdirectories
-        (case_path / "constant" / "polyMesh").mkdir(exist_ok=True)
-        (case_path / "constant" / "triSurface").mkdir(exist_ok=True)
-
-        # Create basic control dict
-        self._write_control_dict(case_path, solver_type)
-
-        # Create basic fvSchemes
-        self._write_fv_schemes(case_path)
-
-        # Create basic fvSolution
-        self._write_fv_solution(case_path, solver_type)
-
-        logger.info("Case structure created")
-
-    def _write_control_dict(self, case_path: Path, solver_type: str):
-        """Write controlDict file."""
-        control_dict = f"""/*--------------------------------*- C++ -*----------------------------------*\\
+        try:
+            control_dict = f"""/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
+|  \\\\    /   O peration     | Version:  v2112                                 |
 |   \\\\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
@@ -177,11 +113,12 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
+    location    "system";
     object      controlDict;
 }}
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 
-application     {solver_type};
+application     {config.get('solver', 'simpleFoam')};
 
 startFrom       startTime;
 
@@ -189,15 +126,15 @@ startTime       0;
 
 stopAt          endTime;
 
-endTime         1000;
+endTime         {config.get('end_time', 1000)};
 
-deltaT          1;
+deltaT          {config.get('delta_t', 1)};
 
 writeControl    timeStep;
 
-writeInterval   100;
+writeInterval   {config.get('write_interval', 100)};
 
-purgeWrite      2;
+purgeWrite      {config.get('purge_write', 2)};
 
 writeFormat     ascii;
 
@@ -211,17 +148,31 @@ timePrecision   6;
 
 runTimeModifiable true;
 
-// ************************************************************************* //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 """
-        with open(case_path / "system" / "controlDict", "w") as f:
-            f.write(control_dict)
+            control_dict_path = self.case_dir / "system" / "controlDict"
+            control_dict_path.write_text(control_dict)
+            return True
 
-    def _write_fv_schemes(self, case_path: Path):
-        """Write fvSchemes file."""
+        except Exception as e:
+            print(f"Error writing controlDict: {e}")
+            return False
+
+    def write_fv_schemes(self, solver_type: SolverType = SolverType.SIMPLE_FOAM) -> bool:
+        """
+        Write fvSchemes file.
+
+        Args:
+            solver_type: Type of solver
+
+        Returns:
+            Success status
+        """
+        # Simplified fvSchemes template
         fv_schemes = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
+|  \\\\    /   O peration     | Version:  v2112                                 |
 |   \\\\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
@@ -230,6 +181,7 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
+    location    "system";
     object      fvSchemes;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -242,17 +194,15 @@ ddtSchemes
 gradSchemes
 {
     default         Gauss linear;
-    grad(p)         Gauss linear;
-    grad(U)         Gauss linear;
 }
 
 divSchemes
 {
     default         none;
-    div(phi,U)      bounded Gauss linearUpwind grad(U);
+    div(phi,U)      bounded Gauss upwind;
     div(phi,k)      bounded Gauss upwind;
-    div(phi,epsilon) bounded Gauss upwind;
     div(phi,omega)  bounded Gauss upwind;
+    div(phi,epsilon) bounded Gauss upwind;
     div((nuEff*dev2(T(grad(U))))) Gauss linear;
 }
 
@@ -271,22 +221,30 @@ snGradSchemes
     default         corrected;
 }
 
-wallDist
-{
-    method meshWave;
-}
-
-// ************************************************************************* //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 """
-        with open(case_path / "system" / "fvSchemes", "w") as f:
-            f.write(fv_schemes)
+        try:
+            fv_schemes_path = self.case_dir / "system" / "fvSchemes"
+            fv_schemes_path.write_text(fv_schemes)
+            return True
+        except Exception as e:
+            print(f"Error writing fvSchemes: {e}")
+            return False
 
-    def _write_fv_solution(self, case_path: Path, solver_type: str):
-        """Write fvSolution file."""
+    def write_fv_solution(self, config: Dict[str, Any]) -> bool:
+        """
+        Write fvSolution file.
+
+        Args:
+            config: Solution configuration
+
+        Returns:
+            Success status
+        """
         fv_solution = """/*--------------------------------*- C++ -*----------------------------------*\\
 | =========                 |                                                 |
 | \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
+|  \\\\    /   O peration     | Version:  v2112                                 |
 |   \\\\  /    A nd           | Website:  www.openfoam.com                      |
 |    \\\\/     M anipulation  |                                                 |
 \\*---------------------------------------------------------------------------*/
@@ -295,6 +253,7 @@ FoamFile
     version     2.0;
     format      ascii;
     class       dictionary;
+    location    "system";
     object      fvSolution;
 }
 // * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
@@ -304,7 +263,7 @@ solvers
     p
     {
         solver          GAMG;
-        tolerance       1e-06;
+        tolerance       1e-6;
         relTol          0.1;
         smoother        GaussSeidel;
     }
@@ -313,15 +272,15 @@ solvers
     {
         solver          smoothSolver;
         smoother        symGaussSeidel;
-        tolerance       1e-05;
+        tolerance       1e-5;
         relTol          0.1;
     }
 
-    "(k|epsilon|omega|nuTilda)"
+    "(k|omega|epsilon)"
     {
         solver          smoothSolver;
         smoother        symGaussSeidel;
-        tolerance       1e-05;
+        tolerance       1e-5;
         relTol          0.1;
     }
 }
@@ -335,7 +294,7 @@ SIMPLE
     {
         p               1e-4;
         U               1e-4;
-        "(k|epsilon|omega|nuTilda)" 1e-4;
+        "(k|omega|epsilon)" 1e-4;
     }
 }
 
@@ -348,489 +307,163 @@ relaxationFactors
     equations
     {
         U               0.7;
-        "(k|epsilon|omega|nuTilda)" 0.7;
+        "(k|omega|epsilon)" 0.7;
     }
 }
 
-// ************************************************************************* //
+// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
 """
-        with open(case_path / "system" / "fvSolution", "w") as f:
-            f.write(fv_solution)
-
-    def convert_mesh(
-        self,
-        mesh_file: str,
-        case_dir: str,
-        mesh_format: str = "gmsh"
-    ) -> bool:
-        """
-        Convert mesh to OpenFOAM format.
-
-        Args:
-            mesh_file: Path to mesh file
-            case_dir: OpenFOAM case directory
-            mesh_format: Mesh format ('gmsh', 'fluent', 'star', 'ansys')
-
-        Returns:
-            True if conversion successful
-
-        Raises:
-            FileNotFoundError: If mesh file doesn't exist
-            RuntimeError: If conversion fails
-        """
-        if not os.path.exists(mesh_file):
-            raise FileNotFoundError(f"Mesh file not found: {mesh_file}")
-
-        case_path = Path(case_dir)
-        if not case_path.exists():
-            raise ValueError(f"Case directory doesn't exist: {case_dir}")
-
-        logger.info(f"Converting mesh from {mesh_format} format...")
-
         try:
-            if mesh_format == "gmsh":
-                # Use gmshToFoam
-                cmd = ["gmshToFoam", mesh_file, "-case", case_dir]
-                result = subprocess.run(
-                    cmd,
-                    capture_output=True,
-                    text=True,
-                    cwd=case_dir,
-                    env={**os.environ, **self.openfoam_env}
-                )
-
-                if result.returncode != 0:
-                    logger.error(f"gmshToFoam failed: {result.stderr}")
-                    raise RuntimeError(f"Mesh conversion failed: {result.stderr}")
-
-                logger.info("Mesh converted successfully")
-                return True
-
-            else:
-                raise ValueError(f"Unsupported mesh format: {mesh_format}")
-
+            fv_solution_path = self.case_dir / "system" / "fvSolution"
+            fv_solution_path.write_text(fv_solution)
+            return True
         except Exception as e:
-            logger.error(f"Mesh conversion failed: {str(e)}")
-            raise RuntimeError(f"Failed to convert mesh: {str(e)}")
+            print(f"Error writing fvSolution: {e}")
+            return False
 
-    def set_boundary_conditions(
-        self,
-        case_dir: str,
-        bc_dict: Dict[str, Dict[str, Any]]
-    ):
-        """
-        Set boundary conditions for the case.
-
-        Args:
-            case_dir: OpenFOAM case directory
-            bc_dict: Dictionary of boundary conditions
-                Example:
-                {
-                    "inlet": {
-                        "U": {"type": "fixedValue", "value": [10, 0, 0]},
-                        "p": {"type": "zeroGradient"},
-                        "k": {"type": "fixedValue", "value": 0.1},
-                        "epsilon": {"type": "fixedValue", "value": 0.01}
-                    },
-                    "outlet": {
-                        "U": {"type": "zeroGradient"},
-                        "p": {"type": "fixedValue", "value": 0}
-                    },
-                    "walls": {
-                        "U": {"type": "noSlip"},
-                        "p": {"type": "zeroGradient"}
-                    }
-                }
-        """
-        case_path = Path(case_dir)
-        zero_dir = case_path / "0"
-        zero_dir.mkdir(exist_ok=True)
-
-        # Determine which fields are needed
-        all_fields = set()
-        for patch_bcs in bc_dict.values():
-            all_fields.update(patch_bcs.keys())
-
-        # Write boundary condition files for each field
-        for field in all_fields:
-            self._write_field_file(case_dir, field, bc_dict)
-
-        logger.info("Boundary conditions set")
-
-    def _write_field_file(
-        self,
-        case_dir: str,
-        field: str,
-        bc_dict: Dict[str, Dict[str, Any]]
-    ):
-        """
-        Write boundary condition file for a field.
-
-        Args:
-            case_dir: Case directory
-            field: Field name (U, p, k, epsilon, etc.)
-            bc_dict: Boundary conditions dictionary
-        """
-        case_path = Path(case_dir)
-
-        # Determine field class and dimensions
-        field_info = {
-            "U": ("volVectorField", "[0 1 -1 0 0 0 0]"),
-            "p": ("volScalarField", "[0 2 -2 0 0 0 0]"),
-            "k": ("volScalarField", "[0 2 -2 0 0 0 0]"),
-            "epsilon": ("volScalarField", "[0 2 -3 0 0 0 0]"),
-            "omega": ("volScalarField", "[0 0 -1 0 0 0 0]"),
-            "nut": ("volScalarField", "[0 2 -1 0 0 0 0]"),
-            "nuTilda": ("volScalarField", "[0 2 -1 0 0 0 0]"),
-        }
-
-        field_class, dimensions = field_info.get(field, ("volScalarField", "[0 0 0 0 0 0 0]"))
-
-        # Build boundary field entries
-        boundary_entries = []
-        for patch_name, patch_bcs in bc_dict.items():
-            if field in patch_bcs:
-                bc = patch_bcs[field]
-                bc_type = bc.get("type", "zeroGradient")
-
-                entry = f"    {patch_name}\n    {{\n"
-                entry += f"        type            {bc_type};\n"
-
-                # Add value if present
-                if "value" in bc:
-                    value = bc["value"]
-                    if isinstance(value, list):
-                        entry += f"        value           uniform ({' '.join(map(str, value))});\n"
-                    else:
-                        entry += f"        value           uniform {value};\n"
-
-                entry += "    }\n"
-                boundary_entries.append(entry)
-
-        # Write field file
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       {field_class};
-    object      {field};
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-dimensions      {dimensions};
-
-internalField   uniform {"(0 0 0)" if field == "U" else "0"};
-
-boundaryField
-{{
-{''.join(boundary_entries)}
-}}
-
-// ************************************************************************* //
-"""
-
-        with open(case_path / "0" / field, "w") as f:
-            f.write(content)
-
-    def set_fluid_properties(
-        self,
-        case_dir: str,
-        fluid: str = "air",
-        turbulence_model: str = "k-epsilon",
-        custom_properties: Optional[Dict[str, float]] = None
-    ):
-        """
-        Set fluid properties and turbulence model.
-
-        Args:
-            case_dir: OpenFOAM case directory
-            fluid: Fluid type ('air', 'water', 'oil') or 'custom'
-            turbulence_model: Turbulence model ('k-epsilon', 'k-omega-sst', 'laminar')
-            custom_properties: Custom fluid properties (if fluid='custom')
-        """
-        case_path = Path(case_dir)
-        constant_dir = case_path / "constant"
-        constant_dir.mkdir(exist_ok=True)
-
-        # Get fluid properties
-        if custom_properties:
-            props = custom_properties
-        elif fluid in self.FLUID_PROPERTIES:
-            props = self.FLUID_PROPERTIES[fluid]
-        else:
-            raise ValueError(f"Unknown fluid: {fluid}")
-
-        # Write transport properties
-        self._write_transport_properties(case_dir, props)
-
-        # Write turbulence properties
-        self._write_turbulence_properties(case_dir, turbulence_model)
-
-        logger.info(f"Fluid properties set for {fluid} with {turbulence_model} turbulence model")
-
-    def _write_transport_properties(self, case_dir: str, props: Dict[str, float]):
-        """Write transportProperties file."""
-        nu = props.get("kinematic_viscosity", 1.5e-5)
-
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    object      transportProperties;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-nu              {nu};
-
-// ************************************************************************* //
-"""
-
-        with open(Path(case_dir) / "constant" / "transportProperties", "w") as f:
-            f.write(content)
-
-    def _write_turbulence_properties(self, case_dir: str, model: str):
-        """Write turbulenceProperties file."""
-        turbulence_model = self.TURBULENCE_MODELS.get(model, "kEpsilon")
-        simulation_type = "RAS" if model != "laminar" else "laminar"
-
-        content = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    object      turbulenceProperties;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-simulationType  {simulation_type};
-
-RAS
-{{
-    RASModel        {turbulence_model};
-    turbulence      on;
-    printCoeffs     on;
-}}
-
-// ************************************************************************* //
-"""
-
-        with open(Path(case_dir) / "constant" / "turbulenceProperties", "w") as f:
-            f.write(content)
-
-    def run_simulation(
-        self,
-        case_dir: str,
-        solver: str = "simpleFoam",
-        parallel: bool = False,
-        cores: int = 4,
-        background: bool = False
-    ) -> Dict[str, Any]:
+    def run_simulation(self, solver: SolverType = SolverType.SIMPLE_FOAM,
+                      parallel: bool = False, num_cores: int = 4,
+                      callback: Optional[Callable] = None) -> bool:
         """
         Run OpenFOAM simulation.
 
         Args:
-            case_dir: OpenFOAM case directory
-            solver: Solver name ('simpleFoam', 'pimpleFoam', etc.)
-            parallel: Run in parallel mode
-            cores: Number of cores for parallel run
-            background: Run in background
+            solver: Solver type to use
+            parallel: Run in parallel
+            num_cores: Number of cores for parallel execution
+            callback: Callback function for progress updates
 
         Returns:
-            Dictionary with run information:
-                - success: bool
-                - return_code: int
-                - log_file: str
-                - runtime: float (seconds)
-
-        Raises:
-            RuntimeError: If simulation fails
+            Success status
         """
-        case_path = Path(case_dir)
-        if not case_path.exists():
-            raise ValueError(f"Case directory doesn't exist: {case_dir}")
-
-        logger.info(f"Running {solver} simulation...")
-        start_time = time.time()
-
-        log_file = case_path / f"{solver}.log"
+        self.status = SimulationStatus.INITIALIZING
 
         try:
             if parallel:
-                # Decompose domain
-                self._decompose_domain(case_dir, cores)
+                # Decompose case
+                decompose_cmd = ["decomposePar", "-case", str(self.case_dir)]
+                subprocess.run(decompose_cmd, check=True, capture_output=True)
 
-                # Run parallel
-                cmd = ["mpirun", "-np", str(cores), solver, "-parallel", "-case", case_dir]
+                # Run in parallel
+                cmd = [
+                    "mpirun", "-np", str(num_cores),
+                    solver.value, "-parallel",
+                    "-case", str(self.case_dir)
+                ]
             else:
-                cmd = [solver, "-case", case_dir]
+                # Run in serial
+                cmd = [solver.value, "-case", str(self.case_dir)]
 
-            with open(log_file, "w") as f:
-                result = subprocess.run(
-                    cmd,
-                    stdout=f,
-                    stderr=subprocess.STDOUT,
-                    cwd=case_dir,
-                    env={**os.environ, **self.openfoam_env}
-                )
+            self.status = SimulationStatus.RUNNING
 
-            runtime = time.time() - start_time
+            # Start process
+            self.process = subprocess.Popen(
+                cmd,
+                stdout=subprocess.PIPE,
+                stderr=subprocess.PIPE,
+                text=True
+            )
 
-            if result.returncode == 0:
-                logger.info(f"Simulation completed successfully in {runtime:.2f}s")
-                success = True
+            # Monitor execution
+            while self.process.poll() is None:
+                line = self.process.stdout.readline()
+                if line:
+                    self._parse_output(line)
+                    if callback:
+                        callback(self.current_iteration, self.residuals)
+
+                time.sleep(0.1)
+
+            # Check result
+            if self.process.returncode == 0:
+                self.status = SimulationStatus.CONVERGED
+                return True
             else:
-                logger.error(f"Simulation failed with return code {result.returncode}")
-                success = False
-
-            return {
-                "success": success,
-                "return_code": result.returncode,
-                "log_file": str(log_file),
-                "runtime": runtime
-            }
+                self.status = SimulationStatus.FAILED
+                return False
 
         except Exception as e:
-            logger.error(f"Simulation execution failed: {str(e)}")
-            raise RuntimeError(f"Failed to run simulation: {str(e)}")
+            print(f"Error running simulation: {e}")
+            self.status = SimulationStatus.FAILED
+            return False
 
-    def _decompose_domain(self, case_dir: str, cores: int):
+    def _parse_output(self, line: str):
+        """Parse solver output for residuals and iteration count."""
+        # Simplified parsing - would need more robust implementation
+        if "Time =" in line:
+            try:
+                self.current_iteration = int(line.split("=")[1].strip())
+            except:
+                pass
+
+        # Parse residuals (simplified)
+        for field in ["U", "p", "k", "omega", "epsilon"]:
+            if f"Solving for {field}" in line or f"{field}:" in line:
+                try:
+                    # Extract residual value (would need proper regex)
+                    parts = line.split()
+                    for i, part in enumerate(parts):
+                        if "Initial" in part or "Final" in part:
+                            if i + 2 < len(parts):
+                                residual = float(parts[i + 2].rstrip(','))
+                                self.residuals[field].append(residual)
+                except:
+                    pass
+
+    def stop_simulation(self):
+        """Stop running simulation."""
+        if self.process and self.process.poll() is None:
+            self.process.terminate()
+            self.process.wait(timeout=10)
+            self.status = SimulationStatus.STOPPED
+
+    def get_residuals(self) -> Dict[str, List[float]]:
+        """Get residual history."""
+        return self.residuals.copy()
+
+    def check_convergence(self, tolerance: float = 1e-4) -> bool:
         """
-        Decompose domain for parallel execution.
+        Check if simulation has converged.
 
         Args:
-            case_dir: Case directory
-            cores: Number of cores
-        """
-        # Write decomposeParDict
-        decompose_dict = f"""/*--------------------------------*- C++ -*----------------------------------*\\
-| =========                 |                                                 |
-| \\\\      /  F ield         | OpenFOAM: The Open Source CFD Toolbox           |
-|  \\\\    /   O peration     | Version:  v2312                                 |
-|   \\\\  /    A nd           | Website:  www.openfoam.com                      |
-|    \\\\/     M anipulation  |                                                 |
-\\*---------------------------------------------------------------------------*/
-FoamFile
-{{
-    version     2.0;
-    format      ascii;
-    class       dictionary;
-    object      decomposeParDict;
-}}
-// * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * * //
-
-numberOfSubdomains {cores};
-
-method          scotch;
-
-// ************************************************************************* //
-"""
-
-        with open(Path(case_dir) / "system" / "decomposeParDict", "w") as f:
-            f.write(decompose_dict)
-
-        # Run decomposePar
-        logger.info(f"Decomposing domain into {cores} parts...")
-        subprocess.run(
-            ["decomposePar", "-case", case_dir],
-            capture_output=True,
-            cwd=case_dir,
-            env={**os.environ, **self.openfoam_env}
-        )
-
-    def check_convergence(
-        self,
-        case_dir: str,
-        residual_threshold: float = 1e-4
-    ) -> Dict[str, Any]:
-        """
-        Check simulation convergence.
-
-        Args:
-            case_dir: OpenFOAM case directory
-            residual_threshold: Residual threshold for convergence
+            tolerance: Convergence tolerance
 
         Returns:
-            Dictionary with convergence information:
-                - converged: bool
-                - final_residuals: dict
-                - iterations: int
+            True if converged
         """
-        case_path = Path(case_dir)
+        # Check if all fields have residuals below tolerance
+        for field, residuals in self.residuals.items():
+            if residuals and residuals[-1] > tolerance:
+                return False
+        return True
 
-        # Try to find log file
-        log_files = list(case_path.glob("*.log"))
-        if not log_files:
-            logger.warning("No log file found")
-            return {"converged": False, "error": "No log file found"}
-
-        log_file = log_files[0]
-
-        # Parse residuals from log
-        residuals = self._parse_residuals(log_file)
-
-        if not residuals:
-            return {"converged": False, "error": "Could not parse residuals"}
-
-        # Check if final residuals are below threshold
-        final_residuals = {k: v[-1] if v else float('inf') for k, v in residuals.items()}
-        converged = all(r < residual_threshold for r in final_residuals.values())
-
-        return {
-            "converged": converged,
-            "final_residuals": final_residuals,
-            "iterations": len(next(iter(residuals.values()))),
-            "residuals_history": residuals
-        }
-
-    def _parse_residuals(self, log_file: Path) -> Dict[str, List[float]]:
+    def get_field_data(self, field_name: str, time_step: Optional[float] = None):
         """
-        Parse residuals from log file.
+        Get field data from results.
 
         Args:
-            log_file: Path to log file
+            field_name: Name of field (U, p, T, etc.)
+            time_step: Time step to read (None for latest)
 
-        Returns:
-            Dictionary mapping field names to residual values
+        Note:
+            This is a placeholder. Full implementation would use
+            PyFoam or foamFile readers to extract field data.
         """
-        residuals = {}
+        # Placeholder implementation
+        return None
 
+    def export_results(self, output_format: str = "vtk"):
+        """
+        Export results to specified format.
+
+        Args:
+            output_format: Output format (vtk, ensight, etc.)
+        """
         try:
-            with open(log_file, "r") as f:
-                for line in f:
-                    # Look for residual lines
-                    # Example: Solving for Ux, Initial residual = 0.123
-                    if "Solving for" in line and "Initial residual" in line:
-                        parts = line.split()
-                        field = parts[2].rstrip(',')
-                        residual = float(parts[-1])
-
-                        if field not in residuals:
-                            residuals[field] = []
-                        residuals[field].append(residual)
-
+            if output_format == "vtk":
+                cmd = ["foamToVTK", "-case", str(self.case_dir)]
+                subprocess.run(cmd, check=True, capture_output=True)
+                return True
         except Exception as e:
-            logger.warning(f"Failed to parse residuals: {str(e)}")
-
-        return residuals
+            print(f"Error exporting results: {e}")
+            return False

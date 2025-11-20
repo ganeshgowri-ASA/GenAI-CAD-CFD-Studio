@@ -1,448 +1,308 @@
 """
 Gmsh Mesher Module
-
-Provides mesh generation capabilities using Gmsh Python API for CFD simulations.
+Handles mesh generation using Gmsh for CFD simulations.
 """
 
-import os
-import logging
-from typing import Dict, List, Optional, Tuple, Any
+import gmsh
+from typing import Dict, List, Optional, Any, Tuple
+from pathlib import Path
 import numpy as np
-
-try:
-    import gmsh
-except ImportError:
-    gmsh = None
-
-try:
-    import meshio
-except ImportError:
-    meshio = None
-
-try:
-    import pyvista as pv
-except ImportError:
-    pv = None
-
-logging.basicConfig(level=logging.INFO)
-logger = logging.getLogger(__name__)
 
 
 class GmshMesher:
     """
-    Mesh generator using Gmsh for CFD applications.
+    Wrapper for Gmsh mesh generation.
 
-    This class provides methods to:
-    - Load STEP geometry files
-    - Generate 3D tetrahedral meshes
-    - Define refinement zones
-    - Export meshes in various formats
-    - Visualize meshes
-    - Compute mesh statistics
+    Features:
+    - STEP file import
+    - Mesh size control
+    - Refinement zones
+    - Boundary layer generation
+    - Export to various formats
     """
 
-    def __init__(self, verbose: bool = False):
+    def __init__(self):
+        """Initialize Gmsh mesher."""
+        self.initialized = False
+        self.geometry_loaded = False
+        self.mesh_generated = False
+
+    def initialize(self, verbose: bool = False):
         """
-        Initialize GmshMesher.
+        Initialize Gmsh.
 
         Args:
-            verbose: Enable verbose output from Gmsh
+            verbose: Enable verbose output
         """
-        if gmsh is None:
-            raise ImportError(
-                "gmsh is not installed. Install it with: pip install gmsh"
-            )
+        gmsh.initialize()
+        if not verbose:
+            gmsh.option.setNumber("General.Terminal", 0)
+        self.initialized = True
 
-        self.verbose = verbose
-        self.initialized = False
-
-    def _initialize_gmsh(self):
-        """Initialize Gmsh if not already initialized."""
-        if not self.initialized:
-            gmsh.initialize()
-            if not self.verbose:
-                gmsh.option.setNumber("General.Terminal", 0)
-            self.initialized = True
-
-    def _finalize_gmsh(self):
-        """Finalize Gmsh session."""
+    def finalize(self):
+        """Finalize and cleanup Gmsh."""
         if self.initialized:
             gmsh.finalize()
             self.initialized = False
 
-    def generate_mesh(
-        self,
-        step_file: str,
-        mesh_size: float = 0.1,
-        refinement_zones: Optional[List[Dict[str, Any]]] = None,
-        output_file: Optional[str] = None,
-        algorithm: str = "delaunay",
-        optimize: bool = True,
-        mesh_order: int = 1
-    ) -> str:
+    def load_step_file(self, step_file: Path) -> bool:
         """
-        Generate 3D tetrahedral mesh from STEP file.
+        Load geometry from STEP file.
 
         Args:
-            step_file: Path to STEP geometry file
-            mesh_size: Global mesh element size (default: 0.1)
-            refinement_zones: List of refinement zone specifications
-                Example: [{"type": "box", "x_min": 0, "x_max": 1,
-                          "y_min": 0, "y_max": 1, "z_min": 0, "z_max": 1,
-                          "size": 0.05}]
-            output_file: Output mesh file path (.msh format)
-            algorithm: Meshing algorithm ('delaunay', 'frontal', 'mmg3d')
-            optimize: Apply mesh optimization
-            mesh_order: Element order (1=linear, 2=quadratic)
+            step_file: Path to STEP file
 
         Returns:
-            Path to generated mesh file
-
-        Raises:
-            FileNotFoundError: If STEP file doesn't exist
-            RuntimeError: If mesh generation fails
+            Success status
         """
-        if not os.path.exists(step_file):
-            raise FileNotFoundError(f"STEP file not found: {step_file}")
-
-        if output_file is None:
-            base_name = os.path.splitext(step_file)[0]
-            output_file = f"{base_name}.msh"
+        if not self.initialized:
+            self.initialize()
 
         try:
-            self._initialize_gmsh()
-            gmsh.clear()
-            gmsh.model.add("cfd_mesh")
-
-            # Load STEP geometry
-            logger.info(f"Loading STEP file: {step_file}")
-            gmsh.model.occ.importShapes(step_file)
-            gmsh.model.occ.synchronize()
-
-            # Set global mesh size
-            gmsh.option.setNumber("Mesh.MeshSizeMin", mesh_size * 0.1)
-            gmsh.option.setNumber("Mesh.MeshSizeMax", mesh_size * 2.0)
-            gmsh.option.setNumber("Mesh.CharacteristicLengthMin", mesh_size * 0.1)
-            gmsh.option.setNumber("Mesh.CharacteristicLengthMax", mesh_size * 2.0)
-
-            # Set meshing algorithm
-            algorithm_map = {
-                "delaunay": 1,
-                "frontal": 6,
-                "mmg3d": 7,
-                "hxt": 10
-            }
-            gmsh.option.setNumber(
-                "Mesh.Algorithm3D",
-                algorithm_map.get(algorithm.lower(), 1)
-            )
-
-            # Set mesh element order
-            gmsh.option.setNumber("Mesh.ElementOrder", mesh_order)
-
-            # Apply refinement zones
-            if refinement_zones:
-                self._apply_refinement_zones(refinement_zones)
-
-            # Set characteristic length on all points
-            points = gmsh.model.getEntities(0)
-            for point in points:
-                gmsh.model.mesh.setSize([point], mesh_size)
-
-            # Generate mesh
-            logger.info("Generating 3D mesh...")
-            gmsh.model.mesh.generate(3)
-
-            # Optimize mesh
-            if optimize:
-                logger.info("Optimizing mesh...")
-                gmsh.model.mesh.optimize("Netgen")
-
-            # Save mesh
-            gmsh.write(output_file)
-            logger.info(f"Mesh saved to: {output_file}")
-
-            return output_file
-
+            gmsh.model.add("cfd_model")
+            gmsh.merge(str(step_file))
+            self.geometry_loaded = True
+            return True
         except Exception as e:
-            logger.error(f"Mesh generation failed: {str(e)}")
-            raise RuntimeError(f"Failed to generate mesh: {str(e)}")
-        finally:
-            self._finalize_gmsh()
+            print(f"Error loading STEP file: {e}")
+            return False
 
-    def _apply_refinement_zones(self, refinement_zones: List[Dict[str, Any]]):
+    def set_mesh_size(self, global_size: float, min_size: Optional[float] = None,
+                     max_size: Optional[float] = None):
         """
-        Apply mesh refinement zones.
+        Set global mesh size parameters.
 
         Args:
-            refinement_zones: List of refinement specifications
+            global_size: Target element size
+            min_size: Minimum element size
+            max_size: Maximum element size
         """
-        for zone in refinement_zones:
-            zone_type = zone.get("type", "box")
-            size = zone.get("size", 0.05)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMin", min_size or global_size * 0.1)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthMax", max_size or global_size * 2)
+        gmsh.option.setNumber("Mesh.CharacteristicLengthFactor", global_size)
 
-            if zone_type == "box":
-                # Create refinement box
-                x_min = zone.get("x_min", 0)
-                x_max = zone.get("x_max", 1)
-                y_min = zone.get("y_min", 0)
-                y_max = zone.get("y_max", 1)
-                z_min = zone.get("z_min", 0)
-                z_max = zone.get("z_max", 1)
-
-                # Create box for refinement field
-                field_id = gmsh.model.mesh.field.add("Box")
-                gmsh.model.mesh.field.setNumber(field_id, "VIn", size)
-                gmsh.model.mesh.field.setNumber(field_id, "VOut", size * 2)
-                gmsh.model.mesh.field.setNumber(field_id, "XMin", x_min)
-                gmsh.model.mesh.field.setNumber(field_id, "XMax", x_max)
-                gmsh.model.mesh.field.setNumber(field_id, "YMin", y_min)
-                gmsh.model.mesh.field.setNumber(field_id, "YMax", y_max)
-                gmsh.model.mesh.field.setNumber(field_id, "ZMin", z_min)
-                gmsh.model.mesh.field.setNumber(field_id, "ZMax", z_max)
-
-                gmsh.model.mesh.field.setAsBackgroundMesh(field_id)
-
-            elif zone_type == "distance":
-                # Refine near surfaces
-                surfaces = zone.get("surfaces", [])
-                if surfaces:
-                    field_id = gmsh.model.mesh.field.add("Distance")
-                    gmsh.model.mesh.field.setNumbers(field_id, "SurfacesList", surfaces)
-
-                    threshold_id = gmsh.model.mesh.field.add("Threshold")
-                    gmsh.model.mesh.field.setNumber(threshold_id, "InField", field_id)
-                    gmsh.model.mesh.field.setNumber(threshold_id, "SizeMin", size)
-                    gmsh.model.mesh.field.setNumber(threshold_id, "SizeMax", size * 2)
-                    gmsh.model.mesh.field.setNumber(threshold_id, "DistMin", 0.1)
-                    gmsh.model.mesh.field.setNumber(threshold_id, "DistMax", 0.5)
-
-                    gmsh.model.mesh.field.setAsBackgroundMesh(threshold_id)
-
-    def visualize_mesh(
-        self,
-        mesh_file: str,
-        show_edges: bool = True,
-        show_quality: bool = False,
-        screenshot: Optional[str] = None
-    ) -> Any:
+    def add_refinement_box(self, center: Tuple[float, float, float],
+                          dimensions: Tuple[float, float, float],
+                          element_size: float):
         """
-        Visualize mesh using PyVista.
+        Add a box refinement zone.
 
         Args:
-            mesh_file: Path to mesh file
-            show_edges: Show mesh edges
-            show_quality: Color by mesh quality
-            screenshot: Save screenshot to file
+            center: Box center coordinates
+            dimensions: Box dimensions (width, height, depth)
+            element_size: Element size in the box
+        """
+        x, y, z = center
+        dx, dy, dz = [d/2 for d in dimensions]
+
+        # Create a field for refinement
+        field_id = gmsh.model.mesh.field.add("Box")
+        gmsh.model.mesh.field.setNumber(field_id, "VIn", element_size)
+        gmsh.model.mesh.field.setNumber(field_id, "VOut", element_size * 2)
+        gmsh.model.mesh.field.setNumber(field_id, "XMin", x - dx)
+        gmsh.model.mesh.field.setNumber(field_id, "XMax", x + dx)
+        gmsh.model.mesh.field.setNumber(field_id, "YMin", y - dy)
+        gmsh.model.mesh.field.setNumber(field_id, "YMax", y + dy)
+        gmsh.model.mesh.field.setNumber(field_id, "ZMin", z - dz)
+        gmsh.model.mesh.field.setNumber(field_id, "ZMax", z + dz)
+
+        return field_id
+
+    def add_refinement_sphere(self, center: Tuple[float, float, float],
+                             radius: float, element_size: float):
+        """
+        Add a spherical refinement zone.
+
+        Args:
+            center: Sphere center coordinates
+            radius: Sphere radius
+            element_size: Element size in the sphere
+        """
+        field_id = gmsh.model.mesh.field.add("Ball")
+        gmsh.model.mesh.field.setNumber(field_id, "VIn", element_size)
+        gmsh.model.mesh.field.setNumber(field_id, "VOut", element_size * 2)
+        gmsh.model.mesh.field.setNumber(field_id, "XCenter", center[0])
+        gmsh.model.mesh.field.setNumber(field_id, "YCenter", center[1])
+        gmsh.model.mesh.field.setNumber(field_id, "ZCenter", center[2])
+        gmsh.model.mesh.field.setNumber(field_id, "Radius", radius)
+
+        return field_id
+
+    def add_refinement_zones(self, zones: List[Dict[str, Any]]):
+        """
+        Add multiple refinement zones.
+
+        Args:
+            zones: List of refinement zone specifications
+        """
+        field_ids = []
+
+        for zone in zones:
+            zone_type = zone.get("type")
+
+            if zone_type == "Box":
+                field_id = self.add_refinement_box(
+                    zone["center"],
+                    zone["dims"],
+                    zone["size"]
+                )
+                field_ids.append(field_id)
+
+            elif zone_type == "Sphere":
+                field_id = self.add_refinement_sphere(
+                    zone["center"],
+                    zone["radius"],
+                    zone["size"]
+                )
+                field_ids.append(field_id)
+
+        # Combine all refinement fields
+        if field_ids:
+            min_field = gmsh.model.mesh.field.add("Min")
+            gmsh.model.mesh.field.setNumbers(min_field, "FieldsList", field_ids)
+            gmsh.model.mesh.field.setAsBackgroundMesh(min_field)
+
+    def generate_mesh(self, dimension: int = 3, algorithm: int = 1) -> bool:
+        """
+        Generate mesh.
+
+        Args:
+            dimension: Mesh dimension (2 or 3)
+            algorithm: Meshing algorithm (1=Delaunay, 5=Frontal, etc.)
 
         Returns:
-            PyVista plotter object
-
-        Raises:
-            ImportError: If PyVista or meshio not installed
-            FileNotFoundError: If mesh file doesn't exist
+            Success status
         """
-        if pv is None:
-            raise ImportError(
-                "pyvista is not installed. Install it with: pip install pyvista"
-            )
-        if meshio is None:
-            raise ImportError(
-                "meshio is not installed. Install it with: pip install meshio"
-            )
+        if not self.geometry_loaded:
+            print("Error: No geometry loaded")
+            return False
 
-        if not os.path.exists(mesh_file):
-            raise FileNotFoundError(f"Mesh file not found: {mesh_file}")
+        try:
+            gmsh.model.mesh.setAlgorithm(dimension, algorithm)
+            gmsh.model.mesh.generate(dimension)
+            self.mesh_generated = True
+            return True
+        except Exception as e:
+            print(f"Error generating mesh: {e}")
+            return False
 
-        # Read mesh
-        logger.info(f"Loading mesh: {mesh_file}")
-        mesh = meshio.read(mesh_file)
-
-        # Convert to PyVista format
-        points = mesh.points
-        cells = []
-        cell_types = []
-
-        for cell_block in mesh.cells:
-            if cell_block.type == "tetra":
-                cells.extend(cell_block.data)
-                cell_types.extend([pv.CellType.TETRA] * len(cell_block.data))
-            elif cell_block.type == "triangle":
-                cells.extend(cell_block.data)
-                cell_types.extend([pv.CellType.TRIANGLE] * len(cell_block.data))
-
-        if not cells:
-            logger.warning("No cells found in mesh")
-            return None
-
-        # Create unstructured grid
-        cells_array = np.array(cells)
-        if cells_array.ndim == 2:
-            # Convert to PyVista format: [n_points, p0, p1, ..., pn]
-            n_points_per_cell = cells_array.shape[1]
-            cells_pyvista = np.hstack([
-                np.full((cells_array.shape[0], 1), n_points_per_cell),
-                cells_array
-            ]).flatten()
-        else:
-            cells_pyvista = cells_array
-
-        grid = pv.UnstructuredGrid(cells_pyvista, cell_types, points)
-
-        # Create plotter
-        plotter = pv.Plotter()
-
-        if show_quality:
-            # Compute and display mesh quality
-            grid = grid.compute_cell_quality(quality_measure='scaled_jacobian')
-            plotter.add_mesh(
-                grid,
-                scalars='CellQuality',
-                show_edges=show_edges,
-                cmap='RdYlGn',
-                clim=[-1, 1]
-            )
-        else:
-            plotter.add_mesh(grid, show_edges=show_edges, color='lightblue')
-
-        plotter.add_axes()
-        plotter.view_isometric()
-
-        if screenshot:
-            plotter.screenshot(screenshot)
-            logger.info(f"Screenshot saved to: {screenshot}")
-
-        return plotter
-
-    def get_mesh_stats(self, mesh_file: str) -> Dict[str, Any]:
+    def get_mesh_statistics(self) -> Dict[str, int]:
         """
         Get mesh statistics.
 
-        Args:
-            mesh_file: Path to mesh file
-
         Returns:
-            Dictionary containing mesh statistics:
-                - n_nodes: Number of nodes
-                - n_elements: Number of elements
-                - n_tetra: Number of tetrahedral elements
-                - n_triangle: Number of triangle elements
-                - volume: Total mesh volume (if applicable)
-                - quality_min: Minimum element quality
-                - quality_mean: Mean element quality
-                - quality_std: Standard deviation of element quality
-
-        Raises:
-            FileNotFoundError: If mesh file doesn't exist
+            Dictionary with node and element counts
         """
-        if meshio is None:
-            raise ImportError(
-                "meshio is not installed. Install it with: pip install meshio"
-            )
+        if not self.mesh_generated:
+            return {"nodes": 0, "elements": 0, "triangles": 0, "tetrahedra": 0}
 
-        if not os.path.exists(mesh_file):
-            raise FileNotFoundError(f"Mesh file not found: {mesh_file}")
+        node_tags, _, _ = gmsh.model.mesh.getNodes()
+        num_nodes = len(node_tags)
 
-        # Read mesh
-        mesh = meshio.read(mesh_file)
+        # Get element counts
+        elem_types, _, _ = gmsh.model.mesh.getElements()
 
-        stats = {
-            "n_nodes": len(mesh.points),
-            "n_elements": 0,
-            "n_tetra": 0,
-            "n_triangle": 0,
-            "n_hexahedron": 0,
-            "n_quad": 0,
+        num_triangles = 0
+        num_tetrahedra = 0
+
+        for elem_type in elem_types:
+            if elem_type == 2:  # Triangle
+                _, _, elem_tags = gmsh.model.mesh.getElements(2, -1)
+                num_triangles = len(elem_tags[0]) if elem_tags else 0
+            elif elem_type == 4:  # Tetrahedron
+                _, _, elem_tags = gmsh.model.mesh.getElements(3, -1)
+                num_tetrahedra = len(elem_tags[0]) if elem_tags else 0
+
+        return {
+            "nodes": num_nodes,
+            "elements": num_triangles + num_tetrahedra,
+            "triangles": num_triangles,
+            "tetrahedra": num_tetrahedra
         }
 
-        # Count elements by type
-        for cell_block in mesh.cells:
-            n_cells = len(cell_block.data)
-            stats["n_elements"] += n_cells
-
-            if cell_block.type == "tetra":
-                stats["n_tetra"] += n_cells
-            elif cell_block.type == "triangle":
-                stats["n_triangle"] += n_cells
-            elif cell_block.type == "hexahedron":
-                stats["n_hexahedron"] += n_cells
-            elif cell_block.type == "quad":
-                stats["n_quad"] += n_cells
-
-        # Compute mesh quality if PyVista is available
-        if pv is not None:
-            try:
-                # Convert to PyVista
-                points = mesh.points
-                cells = []
-                cell_types = []
-
-                for cell_block in mesh.cells:
-                    if cell_block.type == "tetra":
-                        for cell in cell_block.data:
-                            cells.extend([4] + cell.tolist())
-                            cell_types.append(pv.CellType.TETRA)
-
-                if cells:
-                    grid = pv.UnstructuredGrid(cells, cell_types, points)
-                    grid = grid.compute_cell_quality(quality_measure='scaled_jacobian')
-
-                    quality = grid['CellQuality']
-                    stats["quality_min"] = float(np.min(quality))
-                    stats["quality_max"] = float(np.max(quality))
-                    stats["quality_mean"] = float(np.mean(quality))
-                    stats["quality_std"] = float(np.std(quality))
-
-                    # Count poor quality elements
-                    stats["n_poor_quality"] = int(np.sum(quality < 0.2))
-
-            except Exception as e:
-                logger.warning(f"Failed to compute mesh quality: {str(e)}")
-
-        return stats
-
-    def export_mesh(
-        self,
-        mesh_file: str,
-        output_format: str = "vtk",
-        output_file: Optional[str] = None
-    ) -> str:
+    def export_mesh(self, output_file: Path, format: str = "msh"):
         """
-        Export mesh to different format.
+        Export mesh to file.
 
         Args:
-            mesh_file: Input mesh file path
-            output_format: Output format ('vtk', 'vtu', 'stl', 'obj')
-            output_file: Output file path (auto-generated if None)
-
-        Returns:
-            Path to exported mesh file
+            output_file: Output file path
+            format: Export format (msh, vtk, stl, etc.)
         """
-        if meshio is None:
-            raise ImportError(
-                "meshio is not installed. Install it with: pip install meshio"
-            )
+        if not self.mesh_generated:
+            print("Error: No mesh to export")
+            return False
 
-        if not os.path.exists(mesh_file):
-            raise FileNotFoundError(f"Mesh file not found: {mesh_file}")
-
-        # Read mesh
-        mesh = meshio.read(mesh_file)
-
-        # Generate output filename
-        if output_file is None:
-            base_name = os.path.splitext(mesh_file)[0]
-            output_file = f"{base_name}.{output_format}"
-
-        # Export mesh
-        meshio.write(output_file, mesh)
-        logger.info(f"Mesh exported to: {output_file}")
-
-        return output_file
-
-    def __del__(self):
-        """Cleanup Gmsh on deletion."""
         try:
-            self._finalize_gmsh()
-        except:
-            pass
+            # Ensure correct extension
+            if format == "msh":
+                output_file = output_file.with_suffix(".msh")
+            elif format == "vtk":
+                output_file = output_file.with_suffix(".vtk")
+            elif format == "stl":
+                output_file = output_file.with_suffix(".stl")
+
+            gmsh.write(str(output_file))
+            return True
+        except Exception as e:
+            print(f"Error exporting mesh: {e}")
+            return False
+
+    def visualize(self):
+        """Launch Gmsh GUI for visualization (if available)."""
+        if self.initialized:
+            gmsh.fltk.run()
+
+
+def create_mesh_from_config(step_file: Path, config: Dict[str, Any],
+                           output_file: Path) -> Tuple[bool, Dict[str, int]]:
+    """
+    Create mesh from configuration.
+
+    Args:
+        step_file: Path to STEP file
+        config: Mesh configuration dictionary
+        output_file: Output mesh file path
+
+    Returns:
+        Tuple of (success, statistics)
+    """
+    mesher = GmshMesher()
+
+    try:
+        # Initialize
+        mesher.initialize(verbose=False)
+
+        # Load geometry
+        if not mesher.load_step_file(step_file):
+            return False, {}
+
+        # Set mesh size
+        mesher.set_mesh_size(
+            config.get("global_size", 0.1),
+            config.get("min_size"),
+            config.get("max_size")
+        )
+
+        # Add refinement zones
+        refinement_zones = config.get("refinement_zones", [])
+        if refinement_zones:
+            mesher.add_refinement_zones(refinement_zones)
+
+        # Generate mesh
+        if not mesher.generate_mesh(dimension=3):
+            return False, {}
+
+        # Get statistics
+        stats = mesher.get_mesh_statistics()
+
+        # Export
+        mesher.export_mesh(output_file, format="msh")
+
+        return True, stats
+
+    except Exception as e:
+        print(f"Error in mesh generation: {e}")
+        return False, {}
+
+    finally:
+        mesher.finalize()

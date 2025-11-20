@@ -139,3 +139,13 @@ loguru>=0.7.0             # Advanced logging
 # torch>=2.0.0            # PyTorch for ML models
 # transformers>=4.30.0    # Hugging Face transformers
 # Minimum Python version: 3.9+
+# Core Dependencies
+pyvista>=0.43.0
+vtk>=9.2.0
+# UI Components
+streamlit-aggrid>=0.3.4
+# CAD/Geometry Processing
+pythonOCC-core>=7.7.0
+gmsh>=4.11.0
+# CFD
+PyFoam>=2022.9
