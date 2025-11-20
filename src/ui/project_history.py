@@ -767,5 +767,20 @@ def main():
         render_backup_management()
 
 
+def render():
+    """Render function for tab integration"""
+    # Call main without page config (already set by app.py)
+    st.header('📚 Project History & Version Control')
+
+    st.markdown(
+        """
+        Track project changes, manage versions, and view audit logs.
+        """
+    )
+
+    # Placeholder for now
+    st.info("🚧 Project History UI is being integrated. Core functionality available through main() function.")
+
+
 if __name__ == "__main__":
     main()

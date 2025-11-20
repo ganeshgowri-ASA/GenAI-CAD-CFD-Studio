@@ -394,5 +394,23 @@ def main():
     st.caption("🌞 Solar PV Layout Generator | GenAI CAD-CFD Studio | Powered by Streamlit")
 
 
+def render():
+    """Render function for tab integration"""
+    # Import here to avoid circular dependencies at module level
+    initialize_session_state()
+
+    # Header
+    st.header('🗺️ Solar PV Layout Generator')
+
+    st.markdown(
+        """
+        Design solar panel layouts on interactive maps with AI-powered optimization.
+        """
+    )
+
+    # The main content would go here - for now, show a placeholder
+    st.info("🚧 Layout Generator UI is being integrated. Core functionality available through main() function.")
+
+
 if __name__ == "__main__":
     main()

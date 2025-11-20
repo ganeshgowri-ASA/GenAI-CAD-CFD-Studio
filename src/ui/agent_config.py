@@ -601,6 +601,11 @@ def render_agent_config_page():
     render_custom_agent_integration()
 
 
+def render():
+    """Render function for tab integration"""
+    render_agent_config_page()
+
+
 if __name__ == "__main__":
     # For standalone testing
     st.set_page_config(

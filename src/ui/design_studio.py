@@ -242,5 +242,11 @@ def main():
     studio.render()
 
 
+def render():
+    """Render function for tab integration"""
+    studio = DesignStudio()
+    studio.render()
+
+
 if __name__ == "__main__":
     main()
