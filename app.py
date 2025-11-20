@@ -1,8 +1,11 @@
 """
-GenAI CAD-CFD Studio - Main Application Entry Point
-Launch the AI Design Studio
+Solar PV Layout Generator - Main Application Entry Point
+GenAI CAD-CFD Studio
+
+Run with: streamlit run app.py
 """
-from src.ui.design_studio import main
+
+from src.ui.layout_generator import main
 
 if __name__ == "__main__":
     main()
