@@ -103,3 +103,39 @@ python-dateutil>=2.8.2
 black>=23.0.0
 flake8>=6.0.0
 mypy>=1.5.0
+# GenAI CAD/CFD Studio Requirements
+# CFD Core Dependencies
+# Mesh Generation
+gmsh>=4.13.0              # Gmsh Python API for mesh generation
+meshio>=5.3.0             # Mesh I/O library supporting multiple formats
+pyvista>=0.43.0           # 3D visualization and mesh analysis
+vtk>=9.2.0                # Visualization Toolkit
+# Numerical Computing
+numpy>=1.24.0             # Numerical computing
+scipy>=1.10.0             # Scientific computing
+# OpenFOAM Integration
+# Note: PyFoam is optional and can be installed separately
+# PyFoam>=2024.0          # OpenFOAM Python wrapper (install from source if needed)
+# Cloud CFD (SimScale)
+requests>=2.31.0          # HTTP library for API calls
+# CAD/Geometry
+# build123d>=0.5.0        # 3D CAD library (optional, for geometry generation)
+pytest>=7.4.0             # Testing framework
+pytest-cov>=4.1.0         # Test coverage
+pytest-mock>=3.11.0       # Mocking for tests
+black>=23.7.0             # Code formatter
+flake8>=6.1.0             # Linter
+mypy>=1.5.0               # Type checker
+isort>=5.12.0             # Import sorter
+# Documentation
+sphinx>=7.1.0             # Documentation generator
+sphinx-rtd-theme>=1.3.0   # ReadTheDocs theme
+python-dotenv>=1.0.0      # Environment variable management
+tqdm>=4.66.0              # Progress bars
+loguru>=0.7.0             # Advanced logging
+# Optional: Zoo.dev API integration
+# zoo-api>=0.1.0          # Zoo.dev Python client (if available)
+# Optional: AI/ML for design optimization
+# torch>=2.0.0            # PyTorch for ML models
+# transformers>=4.30.0    # Hugging Face transformers
+# Minimum Python version: 3.9+

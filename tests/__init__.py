@@ -1,3 +1,3 @@
 """
-Test suite for GenAI-CAD-CFD-Studio.
+Test package for GenAI CAD/CFD Studio
 """
