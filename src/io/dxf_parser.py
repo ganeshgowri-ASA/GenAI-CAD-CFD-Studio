@@ -5,10 +5,16 @@ Handles parsing of DXF (Drawing Exchange Format) files using ezdxf library.
 Supports DXF versions R12 through R2018.
 """
 
-import ezdxf
+from __future__ import annotations
 from typing import Dict, List, Tuple, Any, Optional
 import numpy as np
 from pathlib import Path
+
+try:
+    import ezdxf
+    HAS_EZDXF = True
+except ImportError:
+    HAS_EZDXF = False
 
 
 class DXFParser:
@@ -27,6 +33,11 @@ class DXFParser:
 
     def __init__(self):
         """Initialize DXF parser."""
+        if not HAS_EZDXF:
+            raise ImportError(
+                "ezdxf library is required for DXF parsing. "
+                "Install it with: pip install ezdxf"
+            )
         self.doc = None
         self.modelspace = None
 

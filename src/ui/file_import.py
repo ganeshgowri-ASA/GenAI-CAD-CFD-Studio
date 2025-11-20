@@ -27,7 +27,7 @@ from .components.file_uploader import (
 )
 
 # Import importer and visualization
-from ..io import universal_importer
+from ..io import GeometryData, parse as parse_file
 from ..visualization.preview_basic import (
     plot_geometry_data,
     create_camera_controls
@@ -148,7 +148,7 @@ def process_uploaded_file(uploaded_file):
             time.sleep(0.2)
 
             # Parse the file
-            geometry = universal_importer.parse(tmp_path)
+            geometry = parse_file(tmp_path)
 
             # Update progress
             status_text.text("📊 Extracting information...")
@@ -206,7 +206,7 @@ def process_uploaded_file(uploaded_file):
             )
 
 
-def display_geometry_info(geometry: universal_importer.GeometryData):
+def display_geometry_info(geometry: GeometryData):
     """
     Display detailed geometry information.
 
@@ -252,7 +252,7 @@ def display_geometry_info(geometry: universal_importer.GeometryData):
         st.info(f"ℹ️ {geometry.metadata['note']}")
 
 
-def display_3d_preview(geometry: universal_importer.GeometryData):
+def display_3d_preview(geometry: GeometryData):
     """
     Display interactive 3D preview of the geometry.
 
@@ -317,7 +317,7 @@ def display_3d_preview(geometry: universal_importer.GeometryData):
         st.error(f"Error rendering 3D preview: {str(e)}")
 
 
-def display_export_section(geometry: universal_importer.GeometryData, original_filename: str):
+def display_export_section(geometry: GeometryData, original_filename: str):
     """
     Display export and conversion options.
 
@@ -359,7 +359,7 @@ def display_export_section(geometry: universal_importer.GeometryData, original_f
             export_report_txt(geometry, f"{base_name}_report.txt")
 
 
-def export_as_stl(geometry: universal_importer.GeometryData, filename: str):
+def export_as_stl(geometry: GeometryData, filename: str):
     """Export geometry as STL file."""
     try:
         import struct
@@ -397,7 +397,7 @@ def export_as_stl(geometry: universal_importer.GeometryData, filename: str):
         st.error(f"Error exporting STL: {str(e)}")
 
 
-def export_as_obj(geometry: universal_importer.GeometryData, filename: str):
+def export_as_obj(geometry: GeometryData, filename: str):
     """Export geometry as OBJ file."""
     try:
         obj_data = io.StringIO()
@@ -426,7 +426,7 @@ def export_as_obj(geometry: universal_importer.GeometryData, filename: str):
         st.error(f"Error exporting OBJ: {str(e)}")
 
 
-def export_as_ply(geometry: universal_importer.GeometryData, filename: str):
+def export_as_ply(geometry: GeometryData, filename: str):
     """Export geometry as PLY file."""
     try:
         ply_data = io.StringIO()
@@ -459,7 +459,7 @@ def export_as_ply(geometry: universal_importer.GeometryData, filename: str):
         st.error(f"Error exporting PLY: {str(e)}")
 
 
-def export_vertices_csv(geometry: universal_importer.GeometryData, filename: str):
+def export_vertices_csv(geometry: GeometryData, filename: str):
     """Export vertices as CSV file."""
     try:
         csv_data = io.StringIO()
@@ -479,7 +479,7 @@ def export_vertices_csv(geometry: universal_importer.GeometryData, filename: str
         st.error(f"Error exporting CSV: {str(e)}")
 
 
-def export_metrics_json(geometry: universal_importer.GeometryData, filename: str):
+def export_metrics_json(geometry: GeometryData, filename: str):
     """Export geometry metrics as JSON."""
     try:
         import json
@@ -515,7 +515,7 @@ def export_metrics_json(geometry: universal_importer.GeometryData, filename: str
         st.error(f"Error exporting JSON: {str(e)}")
 
 
-def export_report_txt(geometry: universal_importer.GeometryData, filename: str):
+def export_report_txt(geometry: GeometryData, filename: str):
     """Export detailed report as text file."""
     try:
         report = io.StringIO()

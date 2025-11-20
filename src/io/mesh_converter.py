@@ -5,10 +5,16 @@ Provides universal mesh format conversion using meshio library.
 Supports 20+ mesh formats including VTK, MSH, ANSYS, Abaqus, and more.
 """
 
-import meshio
+from __future__ import annotations
 import numpy as np
 from typing import Dict, Any, Optional, List, Union
 from pathlib import Path
+
+try:
+    import meshio
+    HAS_MESHIO = True
+except ImportError:
+    HAS_MESHIO = False
 
 
 class MeshConverter:
@@ -83,6 +89,11 @@ class MeshConverter:
 
     def __init__(self):
         """Initialize mesh converter."""
+        if not HAS_MESHIO:
+            raise ImportError(
+                "meshio library is required for mesh conversion. "
+                "Install it with: pip install meshio"
+            )
         self.mesh = None
 
     def read(self, filepath: str) -> meshio.Mesh:
