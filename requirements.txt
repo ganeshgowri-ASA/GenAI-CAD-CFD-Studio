@@ -6,6 +6,10 @@ pyyaml>=6.0
 python-dotenv>=1.0.0
 pandas>=1.4.0
 numpy>=1.24.0
+requests>=2.31.0
+
+# CAD Generation
+build123d>=0.10.0
 
 # CAD File I/O
 # DXF file parsing
@@ -44,3 +48,6 @@ black>=23.0.0
 flake8>=6.0.0
 pre-commit>=3.5.0
 mypy>=0.950  # Type checking
+
+# Optional: Alternative CAD kernels
+# cadquery>=2.3.0
