@@ -5,9 +5,13 @@ This module provides a comprehensive interface for creating CAD models using
 the build123d library, supporting primitives, operations, and boolean operations.
 """
 
-from typing import Dict, Any, Optional, Union, List
+from __future__ import annotations
+from typing import Dict, Any, Optional, Union, List, TYPE_CHECKING
 from pathlib import Path
 import logging
+
+if TYPE_CHECKING:
+    from build123d import Part
 
 try:
     from build123d import (
@@ -19,6 +23,7 @@ try:
     BUILD123D_AVAILABLE = True
 except ImportError:
     BUILD123D_AVAILABLE = False
+    Part = Any  # Fallback type
     logging.warning("build123d not installed. Install with: pip install build123d>=0.10.0")
 
 logger = logging.getLogger(__name__)

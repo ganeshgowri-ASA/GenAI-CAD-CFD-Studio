@@ -41,6 +41,9 @@ from .build123d_engine import Build123DEngine
 from .zoo_connector import ZooDevConnector
 from .adam_connector import AdamNewConnector
 
+# Multi-modal model generator
+from .model_generator import CADModelGenerator
+
 # Unified interface
 from .agent_interface import (
     CADAgent,
@@ -66,6 +69,9 @@ __all__ = [
     'Build123DEngine',
     'ZooDevConnector',
     'AdamNewConnector',
+
+    # Multi-modal generator
+    'CADModelGenerator',
 
     # Unified interface
     'CADAgent',
