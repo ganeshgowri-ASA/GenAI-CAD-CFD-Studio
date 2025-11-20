@@ -3,13 +3,28 @@ PyVista-based 3D visualization engine for CAD models and CFD results.
 
 This module provides the core PyVistaViewer class for rendering CAD geometries,
 CFD simulation results, and mesh quality visualizations.
+
+NOTE: This module requires PyVista to be installed. It is optional and may not
+be available in all deployment environments (e.g., Streamlit Cloud).
 """
 
+from __future__ import annotations
+
 import numpy as np
-import pyvista as pv
-from typing import Dict, List, Optional, Tuple, Union
+from typing import Dict, List, Optional, Tuple, Union, TYPE_CHECKING, Any
 from pathlib import Path
 import warnings
+
+# Use TYPE_CHECKING to avoid runtime import errors while preserving type hints
+if TYPE_CHECKING:
+    import pyvista as pv
+
+try:
+    import pyvista as pv
+    PYVISTA_AVAILABLE = True
+except ImportError:
+    PYVISTA_AVAILABLE = False
+    pv = None  # type: ignore
 
 
 class PyVistaViewer:
@@ -26,7 +41,15 @@ class PyVistaViewer:
 
         Args:
             theme: PyVista theme ('default', 'dark', 'document', 'paraview')
+
+        Raises:
+            ImportError: If PyVista is not available
         """
+        if not PYVISTA_AVAILABLE:
+            raise ImportError(
+                "PyVista is not available. This module requires PyVista to be installed. "
+                "Install with: pip install pyvista"
+            )
         self.theme = theme
         pv.set_plot_theme(theme)
 
@@ -450,7 +473,7 @@ class PyVistaViewer:
         return mesh
 
     @staticmethod
-    def create_sample_mesh(mesh_type: str = 'sphere') -> pv.PolyData:
+    def create_sample_mesh(mesh_type: str = 'sphere'):
         """
         Create sample mesh for testing and demonstrations.
 
@@ -459,7 +482,17 @@ class PyVistaViewer:
 
         Returns:
             pv.PolyData: Sample mesh
+
+        Raises:
+            ImportError: If PyVista is not available
+            ValueError: If mesh_type is unknown
         """
+        if not PYVISTA_AVAILABLE:
+            raise ImportError(
+                "PyVista is not available. Cannot create sample mesh. "
+                "Install with: pip install pyvista"
+            )
+
         if mesh_type == 'sphere':
             return pv.Sphere(radius=1.0, theta_resolution=30, phi_resolution=30)
         elif mesh_type == 'cube':
