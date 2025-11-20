@@ -3,6 +3,7 @@
 # Core Framework
 streamlit>=1.51.0
 streamlit-aggrid>=0.3.4
+stpyvista>=0.1.0
 pyyaml>=6.0
 python-dotenv>=1.0.0
 pandas>=2.0.0
@@ -16,6 +17,8 @@ loguru>=0.7.0
 anthropic>=0.18.0
 opencv-python>=4.9.0
 Pillow>=10.0.0
+imageio>=2.31.0
+imageio-ffmpeg>=0.4.9
 
 # CAD Generation
 build123d>=0.10.0
@@ -53,7 +56,8 @@ pyglet>=1.5.0  # For visualization (optional)
 matplotlib>=3.8.0
 plotly>=5.18.0  # For 3D interactive preview
 pyvista>=0.43.0  # 3D visualization and mesh analysis
-vtk>=9.2.0  # Visualization Toolkit
+vtk>=9.3.0  # Visualization Toolkit
+colorcet>=3.0.0  # Additional colormaps
 
 # Testing
 pytest>=7.4.0
