@@ -184,3 +184,14 @@ coloredlogs>=15.0.1
 # Optional: CAD/CFD specific libraries (can be added as needed)
 # build123d>=0.3.0
 # cadquery>=2.3.0
+# Project History & Version Control UI Dependencies
+# Core Web Framework
+# GitHub API Integration
+PyGithub>=2.1.1
+# Date and Time Utilities
+pytest-mock>=3.11.1
+# Optional: Database Support for Audit Logs
+# sqlalchemy>=2.0.0
+# ruff>=0.1.0
+# black>=23.0.0
+# mypy>=1.5.0

@@ -1,101 +1,68 @@
 # GenAI-CAD-CFD-Studio
+🚀 Universal AI-Powered CAD &amp; CFD Platform | Democratizing 3D Design &amp; Simulation | Natural Language → Parametric Models | Build123d + Zoo.dev + Adam.new + OpenFOAM | Solar PV, Test Chambers, Digital Twins &amp; More
 
-🚀 Universal AI-Powered CAD & CFD Platform | Democratizing 3D Design & Simulation | Natural Language → Parametric Models | Build123d + Zoo.dev + Adam.new + OpenFOAM | Solar PV, Test Chambers, Digital Twins & More
+## Features
 
-## 🎯 Features
+### 📚 Project History & Version Control UI
+Comprehensive project tracking and management system with:
+- **GitHub Integration**: PR/branch status dashboard, commit history, and branch comparison
+- **Audit Trail**: Complete action logging with search, filter, and export capabilities
+- **Backup Management**: One-click backups, restore functionality, and project exports
+- **Version Control**: Track CAD model history, simulation archives, and design iterations
 
-### ⚙️ Agent Configuration System (NEW!)
+[📖 Full Documentation](docs/PROJECT_HISTORY_UI.md)
 
-Secure, user-friendly interface for managing AI agents and API keys:
-
-- 🔐 **Encrypted API Key Storage** - Fernet symmetric encryption for all API keys
-- 🤖 **Multi-Agent Support** - Zoo.dev, Adam.new, Anthropic Claude, SimScale, and custom agents
-- 📊 **Usage Monitoring** - Track API calls, credits, and rate limits
-- 🚦 **Health Dashboard** - Real-time agent status and connection testing
-- ➕ **Custom Integration** - Add your own AI agents with custom endpoints
-- ⚙️ **Flexible Configuration** - Rate limits, timeouts, models, and prompt templates
-
-[📖 Full Agent Configuration Documentation](docs/AGENT_CONFIG.md)
-
-## 🚀 Quick Start
-
-### Installation
+## Installation
 
 ```bash
-# Clone the repository
-git clone https://github.com/ganeshgowri-ASA/GenAI-CAD-CFD-Studio.git
-cd GenAI-CAD-CFD-Studio
-
 # Install dependencies
 pip install -r requirements.txt
+
+# Run the Project History UI
+streamlit run src/ui/project_history.py
 ```
 
-### Running the Agent Configuration UI
+## Quick Start
+
+### Configure GitHub Integration (Optional)
+
+Create `.streamlit/secrets.toml`:
+
+```toml
+[github]
+token = "your_github_personal_access_token"
+repo = "owner/repository_name"
+```
+
+See [PROJECT_HISTORY_UI.md](docs/PROJECT_HISTORY_UI.md) for detailed setup instructions.
+
+## Testing
 
 ```bash
-streamlit run src/ui/agent_config.py
+# Run all tests with coverage
+pytest tests/test_project_history.py -v --cov=src --cov-report=term-missing
 ```
 
-### Configure Your First Agent
-
-1. Open the Agent Configuration UI
-2. Navigate to "API Key Management"
-3. Enter your API key for Zoo.dev, Adam.new, or Claude
-4. Click "Save" and "Test Connection"
-5. Start using AI-powered CAD generation!
-
-## 📁 Project Structure
+## Project Structure
 
 ```
 GenAI-CAD-CFD-Studio/
 ├── src/
-│   ├── ui/
-│   │   └── agent_config.py         # Agent Configuration UI
-│   ├── utils/
-│   │   └── api_key_manager.py      # Secure key management
-│   └── agents/
-│       └── agent_registry.py        # Agent registration system
-├── tests/
-│   └── test_agent_config.py         # Comprehensive tests
-├── docs/
-│   └── AGENT_CONFIG.md              # Detailed documentation
-├── requirements.txt                  # Python dependencies
-└── README.md                        # This file
+│   ├── ui/                  # Streamlit UI components
+│   │   └── project_history.py
+│   └── utils/              # Utility modules
+│       ├── version_control.py
+│       ├── audit_logger.py
+│       └── project_archiver.py
+├── tests/                  # Test suite
+├── projects/               # Project data
+│   ├── backups/
+│   ├── models/
+│   ├── results/
+│   └── audit_logs/
+└── docs/                   # Documentation
 ```
 
-## 🔐 Security
+## License
 
-- All API keys are encrypted using industry-standard Fernet encryption
-- Keys stored locally in `~/.streamlit/secrets.json` (encrypted)
-- Never logged or transmitted in plain text
-- Restrictive file permissions (owner read/write only)
-- See [Security Best Practices](docs/AGENT_CONFIG.md#security-best-practices)
-
-## 🧪 Testing
-
-```bash
-# Run all tests
-pytest tests/test_agent_config.py -v
-
-# Run with coverage
-pytest tests/test_agent_config.py --cov=src --cov-report=html
-```
-
-## 📚 Documentation
-
-- [Agent Configuration Guide](docs/AGENT_CONFIG.md) - Complete setup and usage guide
-- API Reference - See documentation for SecureKeyManager and AgentRegistry
-- Troubleshooting - Common issues and solutions
-
-## 🤝 Contributing
-
-Contributions are welcome! Please:
-1. Fork the repository
-2. Create a feature branch
-3. Add tests for new features
-4. Update documentation
-5. Submit a pull request
-
-## 📄 License
-
-See LICENSE file for details.
+See [LICENSE](LICENSE) file for details.
