@@ -1,8 +1,5 @@
 """
-GenAI CAD/CFD Studio - Main Package
-
-A comprehensive platform for CAD file processing and CFD analysis powered by AI.
+GenAI-CAD-CFD-Studio source package.
 """
 
-__version__ = "1.0.0"
-__author__ = "GenAI CAD-CFD Studio Team"
+__version__ = '0.1.0'

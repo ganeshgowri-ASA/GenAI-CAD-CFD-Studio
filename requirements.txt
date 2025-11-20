@@ -72,3 +72,14 @@ mypy>=1.8.0
 # build123d>=0.5.0  # Uncomment when ready to integrate
 # OCP>=7.7.0  # Open CASCADE Python bindings
 # Utilities
+# Core dependencies for GenAI-CAD-CFD-Studio
+# Geospatial module requirements
+# Geospatial processing
+shapely>=2.0.0
+geopandas>=0.14.0
+rtree>=1.0.0
+pyproj>=3.6.0
+# Scientific computing and optimization
+matplotlib>=3.7.0
+# Optional: Solar position calculations (can be used as alternative)
+# pvlib>=0.10.0
