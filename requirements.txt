@@ -31,11 +31,15 @@ trimesh[easy]>=4.0.0  # Includes additional dependencies
 # Universal mesh format conversion
 meshio>=5.3.0
 
+# Geospatial processing
+shapely>=2.0.0
+geopandas>=0.14.0
+rtree>=1.0.0
+pyproj>=3.6.0
+
 # Additional mesh processing tools
 scipy>=1.11.0  # For trimesh operations and scientific computing
 networkx>=2.6.0  # For trimesh graph operations
-rtree>=0.9.7  # For spatial queries in trimesh
-shapely>=1.8.0  # For 2D geometry operations
 pyglet>=1.5.0  # For visualization (optional)
 
 # Visualization
@@ -56,3 +60,6 @@ mypy>=0.950  # Type checking
 
 # Optional: Alternative CAD kernels
 # cadquery>=2.3.0
+
+# Optional: Solar position calculations
+# pvlib>=0.10.0
