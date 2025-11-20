@@ -1,440 +1,427 @@
 """
-Layout optimization for Solar PV installations.
-
-Provides tools for generating optimal solar panel layouts within site boundaries,
-considering spacing constraints, coverage, and capacity objectives.
+Solar PV Layout Optimizer
+Generates optimal solar panel layouts within site boundaries
 """
 
-import numpy as np
 import geopandas as gpd
+import numpy as np
 from shapely.geometry import Polygon, Point, box
-from shapely.strtree import STRtree
-from scipy.optimize import differential_evolution
-from typing import Tuple, List, Dict, Optional, Callable
-import warnings
+from shapely.affinity import rotate, translate
+from typing import List, Tuple, Dict, Optional
+import pandas as pd
+from datetime import datetime
+import math
 
 
 class LayoutOptimizer:
-    """
-    Optimizes solar PV panel layouts for maximum efficiency.
+    """Optimizes solar panel layout within site boundaries"""
 
-    Handles grid generation, spatial optimization, and capacity calculations
-    for solar panel installations.
-    """
-
-    def __init__(self):
-        """Initialize the LayoutOptimizer."""
-        self.rtree_index = None
-
-    def generate_grid_layout(
+    def __init__(
         self,
-        site_polygon: Polygon,
-        module_dims: Tuple[float, float],
-        spacing: Tuple[float, float],
-        orientation: float = 0.0,
-        return_all: bool = False
+        module_width: float,
+        module_length: float,
+        module_power: int,
+        row_spacing: float = 1.0,
+        column_spacing: float = 0.02,
+        tilt_angle: float = 20.0,
+        azimuth: float = 180.0
+    ):
+        """
+        Initialize layout optimizer
+
+        Parameters:
+        -----------
+        module_width : float
+            Module width in meters
+        module_length : float
+            Module length in meters
+        module_power : int
+            Module power in watts
+        row_spacing : float
+            Spacing between rows in meters
+        column_spacing : float
+            Spacing between columns in meters
+        tilt_angle : float
+            Module tilt angle in degrees
+        azimuth : float
+            Module azimuth in degrees (0=N, 90=E, 180=S, 270=W)
+        """
+        self.module_width = module_width
+        self.module_length = module_length
+        self.module_power = module_power
+        self.row_spacing = row_spacing
+        self.column_spacing = column_spacing
+        self.tilt_angle = tilt_angle
+        self.azimuth = azimuth
+
+        # Calculate effective row spacing (accounting for tilt)
+        self.effective_row_spacing = self._calculate_effective_spacing()
+
+    def _calculate_effective_spacing(self) -> float:
+        """Calculate effective row spacing accounting for tilt angle"""
+        # Shadow projection increases with tilt
+        tilt_rad = math.radians(self.tilt_angle)
+        shadow_projection = self.module_length * math.sin(tilt_rad)
+        return self.row_spacing + shadow_projection
+
+    def generate_layout(
+        self,
+        boundary: Polygon,
+        orientation: str = 'landscape'
     ) -> gpd.GeoDataFrame:
         """
-        Generate a regular grid layout of solar modules within a site boundary.
+        Generate solar module layout within boundary
 
-        Args:
-            site_polygon: Shapely polygon defining the site boundary
-            module_dims: Tuple of (width, length) of each module in meters
-            spacing: Tuple of (row_spacing, column_spacing) in meters
-            orientation: Rotation angle in degrees (0 = North, clockwise positive)
-            return_all: If True, return all generated modules; if False, only
-                       those within site boundary
+        Parameters:
+        -----------
+        boundary : Polygon
+            Site boundary polygon
+        orientation : str
+            Module orientation: 'landscape' or 'portrait'
 
         Returns:
-            GeoDataFrame with columns:
-                - geometry: Polygon for each module
-                - module_id: Unique identifier for each module
-                - row: Row index in the grid
-                - col: Column index in the grid
-                - orientation: Orientation angle in degrees
-                - center_x: X coordinate of module center
-                - center_y: Y coordinate of module center
-
-        Example:
-            >>> optimizer = LayoutOptimizer()
-            >>> site = Polygon([(0,0), (100,0), (100,100), (0,100)])
-            >>> layout = optimizer.generate_grid_layout(
-            ...     site, module_dims=(2.0, 1.0), spacing=(0.5, 0.5)
-            ... )
+        --------
+        GeoDataFrame : Module layout with geometries and attributes
         """
-        width, length = module_dims
-        row_spacing, col_spacing = spacing
+        # Get boundary bounds
+        minx, miny, maxx, maxy = boundary.bounds
 
-        # Get site bounds
-        minx, miny, maxx, maxy = site_polygon.bounds
+        # Adjust module dimensions based on orientation
+        if orientation == 'portrait':
+            width, length = self.module_length, self.module_width
+        else:
+            width, length = self.module_width, self.module_length
 
         # Calculate grid dimensions
-        step_x = width + col_spacing
-        step_y = length + row_spacing
+        total_width = width + self.column_spacing
+        total_length = length + self.effective_row_spacing
 
-        # Generate grid points
-        x_points = np.arange(minx, maxx, step_x)
-        y_points = np.arange(miny, maxy, step_y)
-
+        # Generate module positions
         modules = []
         module_id = 0
 
-        for row_idx, y in enumerate(y_points):
-            for col_idx, x in enumerate(x_points):
-                # Create module rectangle centered at (x, y)
-                module_box = box(
-                    x - width / 2,
-                    y - length / 2,
-                    x + width / 2,
-                    y + length / 2
-                )
+        # Calculate rotation angle (azimuth offset from south)
+        rotation_angle = self.azimuth - 180  # Relative to south (180°)
 
-                # Apply rotation if specified
-                if orientation != 0.0:
-                    module_box = self._rotate_polygon(
-                        module_box, orientation, (x, y)
+        y = miny
+        row = 0
+
+        while y + length <= maxy:
+            x = minx
+            col = 0
+
+            while x + width <= maxx:
+                # Create module rectangle
+                module_rect = box(x, y, x + width, y + length)
+
+                # Rotate if needed
+                if rotation_angle != 0:
+                    # Rotate around center
+                    center_x = x + width / 2
+                    center_y = y + length / 2
+                    module_rect = rotate(
+                        module_rect,
+                        rotation_angle,
+                        origin=(center_x, center_y)
                     )
 
-                # Check if module is within site boundary
-                if return_all or site_polygon.contains(module_box):
+                # Check if module is within boundary
+                if boundary.contains(module_rect):
                     modules.append({
-                        'geometry': module_box,
                         'module_id': module_id,
-                        'row': row_idx,
-                        'col': col_idx,
-                        'orientation': orientation,
-                        'center_x': x,
-                        'center_y': y
+                        'row': row,
+                        'column': col,
+                        'geometry': module_rect,
+                        'power_watts': self.module_power,
+                        'tilt_angle': self.tilt_angle,
+                        'azimuth': self.azimuth,
+                        'area_m2': width * length
                     })
                     module_id += 1
-                elif site_polygon.intersects(module_box):
-                    # Optionally include partially intersecting modules
-                    intersection = site_polygon.intersection(module_box)
-                    if intersection.area / module_box.area > 0.9:  # 90% threshold
-                        modules.append({
-                            'geometry': module_box,
-                            'module_id': module_id,
-                            'row': row_idx,
-                            'col': col_idx,
-                            'orientation': orientation,
-                            'center_x': x,
-                            'center_y': y
-                        })
-                        module_id += 1
+
+                x += total_width
+                col += 1
+
+            y += total_length
+            row += 1
 
         # Create GeoDataFrame
-        if not modules:
-            # Return empty GeoDataFrame with proper schema
-            return gpd.GeoDataFrame(
-                columns=['module_id', 'row', 'col', 'orientation',
-                        'center_x', 'center_y', 'geometry']
+        if modules:
+            gdf = gpd.GeoDataFrame(modules, crs='EPSG:4326')
+        else:
+            # Empty GeoDataFrame with correct schema
+            gdf = gpd.GeoDataFrame(
+                columns=['module_id', 'row', 'column', 'geometry', 'power_watts',
+                        'tilt_angle', 'azimuth', 'area_m2'],
+                crs='EPSG:4326'
             )
-
-        gdf = gpd.GeoDataFrame(modules, crs='EPSG:4326')
-
-        # Build spatial index for fast collision detection
-        self._build_spatial_index(gdf)
 
         return gdf
 
-    def _rotate_polygon(
+    def calculate_statistics(
         self,
-        polygon: Polygon,
-        angle: float,
-        origin: Tuple[float, float]
-    ) -> Polygon:
+        layout_gdf: gpd.GeoDataFrame,
+        boundary: Polygon
+    ) -> Dict:
         """
-        Rotate a polygon around a point.
+        Calculate layout statistics
 
-        Args:
-            polygon: Polygon to rotate
-            angle: Rotation angle in degrees (clockwise positive)
-            origin: Point to rotate around (x, y)
+        Parameters:
+        -----------
+        layout_gdf : GeoDataFrame
+            Module layout
+        boundary : Polygon
+            Site boundary
 
         Returns:
-            Rotated polygon
+        --------
+        dict : Statistics dictionary
         """
-        from shapely import affinity
-        return affinity.rotate(polygon, angle, origin=origin)
+        if len(layout_gdf) == 0:
+            return {
+                'total_modules': 0,
+                'total_capacity_kw': 0.0,
+                'total_module_area_m2': 0.0,
+                'site_area_m2': boundary.area,
+                'coverage_percentage': 0.0,
+                'modules_per_row': 0,
+                'number_of_rows': 0,
+                'avg_power_density_w_m2': 0.0
+            }
 
-    def _build_spatial_index(self, gdf: gpd.GeoDataFrame) -> None:
-        """
-        Build Rtree spatial index for fast collision detection.
+        total_modules = len(layout_gdf)
+        total_capacity_w = layout_gdf['power_watts'].sum()
+        total_capacity_kw = total_capacity_w / 1000
+        total_module_area = layout_gdf['area_m2'].sum()
+        site_area = boundary.area
+        coverage_percentage = (total_module_area / site_area) * 100
 
-        Args:
-            gdf: GeoDataFrame containing module geometries
-        """
-        geometries = gdf.geometry.tolist()
-        self.rtree_index = STRtree(geometries)
+        # Calculate rows and columns
+        modules_per_row = layout_gdf.groupby('row').size().mean()
+        number_of_rows = layout_gdf['row'].max() + 1
 
-    def optimize_layout(
-        self,
-        site: Polygon,
-        module_dims: Tuple[float, float],
-        objectives: Dict[str, any],
-        constraints: Optional[Dict[str, any]] = None
-    ) -> gpd.GeoDataFrame:
-        """
-        Optimize module layout based on specified objectives.
+        # Power density
+        avg_power_density = total_capacity_w / total_module_area if total_module_area > 0 else 0
 
-        Args:
-            site: Site boundary polygon
-            module_dims: Module dimensions (width, length)
-            objectives: Dictionary of optimization objectives:
-                - 'maximize_count': bool - Maximize number of modules
-                - 'minimize_cable_length': bool - Minimize total cable length
-                - 'optimize_tilt': bool - Optimize tilt angle
-                - 'target_orientation': float - Preferred orientation (degrees)
-            constraints: Optional constraints dictionary:
-                - 'min_spacing': Tuple[float, float] - Minimum spacing
-                - 'max_spacing': Tuple[float, float] - Maximum spacing
-                - 'fixed_orientation': float - Fixed orientation if specified
-
-        Returns:
-            Optimized GeoDataFrame of module layout
-
-        Note:
-            Uses differential evolution algorithm for multi-objective optimization.
-        """
-        # Set default constraints
-        if constraints is None:
-            constraints = {}
-
-        min_spacing = constraints.get('min_spacing', (0.5, 0.5))
-        max_spacing = constraints.get('max_spacing', (3.0, 3.0))
-        fixed_orientation = constraints.get('fixed_orientation', None)
-
-        # Define optimization bounds
-        # [row_spacing, col_spacing, orientation]
-        if fixed_orientation is not None:
-            bounds = [
-                (min_spacing[0], max_spacing[0]),  # row_spacing
-                (min_spacing[1], max_spacing[1]),  # col_spacing
-            ]
-            use_orientation = False
-        else:
-            bounds = [
-                (min_spacing[0], max_spacing[0]),  # row_spacing
-                (min_spacing[1], max_spacing[1]),  # col_spacing
-                (0, 360),  # orientation
-            ]
-            use_orientation = True
-
-        # Define objective function
-        def objective_function(params):
-            if use_orientation:
-                row_sp, col_sp, orient = params
-            else:
-                row_sp, col_sp = params
-                orient = fixed_orientation if fixed_orientation is not None else 0.0
-
-            spacing = (row_sp, col_sp)
-
-            # Generate layout
-            layout = self.generate_grid_layout(
-                site, module_dims, spacing, orientation=orient
-            )
-
-            if len(layout) == 0:
-                return 1e10  # Penalty for invalid layout
-
-            # Multi-objective optimization
-            score = 0.0
-
-            if objectives.get('maximize_count', True):
-                # Negative because we're minimizing
-                score -= len(layout) * 1000
-
-            if objectives.get('minimize_cable_length', False):
-                cable_length = self._estimate_cable_length(layout)
-                score += cable_length
-
-            if objectives.get('optimize_tilt', False) and 'target_orientation' in objectives:
-                target = objectives['target_orientation']
-                orientation_penalty = abs(orient - target)
-                score += orientation_penalty * 10
-
-            return score
-
-        # Run optimization
-        with warnings.catch_warnings():
-            warnings.simplefilter("ignore")
-            result = differential_evolution(
-                objective_function,
-                bounds,
-                seed=42,
-                maxiter=50,
-                popsize=15,
-                atol=0.01,
-                tol=0.01
-            )
-
-        # Generate optimal layout
-        if use_orientation:
-            optimal_spacing = (result.x[0], result.x[1])
-            optimal_orientation = result.x[2]
-        else:
-            optimal_spacing = (result.x[0], result.x[1])
-            optimal_orientation = fixed_orientation if fixed_orientation is not None else 0.0
-
-        optimal_layout = self.generate_grid_layout(
-            site, module_dims, optimal_spacing, orientation=optimal_orientation
-        )
-
-        return optimal_layout
-
-    def _estimate_cable_length(self, layout: gpd.GeoDataFrame) -> float:
-        """
-        Estimate total cable length for a layout.
-
-        Simple estimation based on connecting modules in a grid pattern.
-
-        Args:
-            layout: GeoDataFrame of module layout
-
-        Returns:
-            Estimated total cable length
-        """
-        if len(layout) == 0:
-            return 0.0
-
-        # Simple estimation: sum of distances between adjacent modules
-        centers = layout[['center_x', 'center_y']].values
-        total_length = 0.0
-
-        for i in range(len(centers) - 1):
-            dist = np.sqrt(
-                (centers[i + 1][0] - centers[i][0]) ** 2 +
-                (centers[i + 1][1] - centers[i][1]) ** 2
-            )
-            total_length += dist
-
-        return total_length
-
-    def calculate_coverage(self, site: Polygon, layout: gpd.GeoDataFrame) -> float:
-        """
-        Calculate the coverage percentage of modules over the site area.
-
-        Args:
-            site: Site boundary polygon
-            layout: GeoDataFrame of module layout
-
-        Returns:
-            Coverage percentage (0-100)
-
-        Example:
-            >>> coverage = optimizer.calculate_coverage(site, layout)
-            >>> print(f"Site coverage: {coverage:.2f}%")
-        """
-        if len(layout) == 0:
-            return 0.0
-
-        site_area = site.area
-        modules_area = layout.geometry.area.sum()
-
-        coverage_pct = (modules_area / site_area) * 100.0
-        return min(coverage_pct, 100.0)  # Cap at 100%
-
-    def calculate_total_capacity(
-        self,
-        layout: gpd.GeoDataFrame,
-        module_power: float
-    ) -> float:
-        """
-        Calculate total power capacity of the layout.
-
-        Args:
-            layout: GeoDataFrame of module layout
-            module_power: Power rating of each module in kW
-
-        Returns:
-            Total capacity in kW
-
-        Example:
-            >>> total_kw = optimizer.calculate_total_capacity(layout, 0.4)
-            >>> print(f"Total capacity: {total_kw:.2f} kW")
-        """
-        num_modules = len(layout)
-        total_capacity = num_modules * module_power
-        return total_capacity
-
-    def check_collisions(self, layout: gpd.GeoDataFrame) -> List[Tuple[int, int]]:
-        """
-        Check for collisions between modules in the layout.
-
-        Args:
-            layout: GeoDataFrame of module layout
-
-        Returns:
-            List of tuples containing module_id pairs that collide
-
-        Note:
-            Uses Rtree spatial index for efficient collision detection.
-        """
-        if self.rtree_index is None:
-            self._build_spatial_index(layout)
-
-        collisions = []
-        for idx, row in layout.iterrows():
-            geom = row.geometry
-            module_id = row.module_id
-
-            # Query spatial index
-            possible_matches_idx = self.rtree_index.query(geom)
-
-            for match_idx in possible_matches_idx:
-                match_geom = layout.iloc[match_idx].geometry
-                match_id = layout.iloc[match_idx].module_id
-
-                if module_id != match_id and geom.intersects(match_geom):
-                    # Avoid duplicate pairs
-                    if (match_id, module_id) not in collisions:
-                        collisions.append((module_id, match_id))
-
-        return collisions
-
-    def get_layout_statistics(
-        self,
-        site: Polygon,
-        layout: gpd.GeoDataFrame,
-        module_power: float
-    ) -> Dict[str, float]:
-        """
-        Get comprehensive statistics for a layout.
-
-        Args:
-            site: Site boundary polygon
-            layout: GeoDataFrame of module layout
-            module_power: Power rating per module in kW
-
-        Returns:
-            Dictionary containing:
-                - num_modules: Number of modules
-                - total_capacity_kw: Total capacity in kW
-                - coverage_percent: Site coverage percentage
-                - avg_spacing_x: Average spacing in x direction
-                - avg_spacing_y: Average spacing in y direction
-                - site_area: Total site area
-                - modules_area: Total area covered by modules
-        """
-        stats = {
-            'num_modules': len(layout),
-            'total_capacity_kw': self.calculate_total_capacity(layout, module_power),
-            'coverage_percent': self.calculate_coverage(site, layout),
-            'site_area': site.area,
-            'modules_area': layout.geometry.area.sum() if len(layout) > 0 else 0.0,
+        return {
+            'total_modules': total_modules,
+            'total_capacity_kw': total_capacity_kw,
+            'total_module_area_m2': total_module_area,
+            'site_area_m2': site_area,
+            'coverage_percentage': coverage_percentage,
+            'modules_per_row': modules_per_row,
+            'number_of_rows': number_of_rows,
+            'avg_power_density_w_m2': avg_power_density
         }
 
-        # Calculate average spacing
-        if len(layout) > 1:
-            centers = layout[['center_x', 'center_y']].values
-            x_diffs = np.diff(np.sort(np.unique(centers[:, 0])))
-            y_diffs = np.diff(np.sort(np.unique(centers[:, 1])))
 
-            stats['avg_spacing_x'] = np.mean(x_diffs) if len(x_diffs) > 0 else 0.0
-            stats['avg_spacing_y'] = np.mean(y_diffs) if len(y_diffs) > 0 else 0.0
+class ShadowAnalyzer:
+    """Analyzes shadow patterns for solar installations"""
+
+    def __init__(self, latitude: float, longitude: float):
+        """
+        Initialize shadow analyzer
+
+        Parameters:
+        -----------
+        latitude : float
+            Site latitude
+        longitude : float
+            Site longitude
+        """
+        self.latitude = latitude
+        self.longitude = longitude
+
+    def calculate_sun_position(
+        self,
+        timestamp: datetime
+    ) -> Tuple[float, float]:
+        """
+        Calculate sun position (altitude and azimuth) at given time
+
+        Parameters:
+        -----------
+        timestamp : datetime
+            Time for sun position calculation
+
+        Returns:
+        --------
+        tuple : (altitude, azimuth) in degrees
+        """
+        # Simplified sun position calculation
+        # For production, use pvlib or pysolar library
+
+        # Calculate day of year
+        day_of_year = timestamp.timetuple().tm_yday
+
+        # Calculate hour angle
+        hour = timestamp.hour + timestamp.minute / 60.0
+        hour_angle = (hour - 12) * 15  # degrees
+
+        # Calculate declination (simplified)
+        declination = 23.45 * math.sin(math.radians((360 / 365) * (day_of_year - 81)))
+
+        # Calculate solar altitude
+        lat_rad = math.radians(self.latitude)
+        dec_rad = math.radians(declination)
+        ha_rad = math.radians(hour_angle)
+
+        sin_altitude = (
+            math.sin(lat_rad) * math.sin(dec_rad) +
+            math.cos(lat_rad) * math.cos(dec_rad) * math.cos(ha_rad)
+        )
+        altitude = math.degrees(math.asin(max(-1, min(1, sin_altitude))))
+
+        # Calculate solar azimuth
+        cos_azimuth = (
+            (math.sin(dec_rad) - math.sin(lat_rad) * math.sin(math.radians(altitude))) /
+            (math.cos(lat_rad) * math.cos(math.radians(altitude)))
+        )
+        cos_azimuth = max(-1, min(1, cos_azimuth))
+        azimuth = math.degrees(math.acos(cos_azimuth))
+
+        # Adjust azimuth for afternoon
+        if hour > 12:
+            azimuth = 360 - azimuth
+
+        return altitude, azimuth
+
+    def analyze_shadows(
+        self,
+        layout_gdf: gpd.GeoDataFrame,
+        timestamp: datetime,
+        grid_resolution: float = 1.0
+    ) -> gpd.GeoDataFrame:
+        """
+        Analyze shadow patterns for module layout
+
+        Parameters:
+        -----------
+        layout_gdf : GeoDataFrame
+            Module layout
+        timestamp : datetime
+            Time for shadow analysis
+        grid_resolution : float
+            Grid cell size in meters
+
+        Returns:
+        --------
+        GeoDataFrame : Shadow intensity grid
+        """
+        if len(layout_gdf) == 0:
+            return gpd.GeoDataFrame(columns=['geometry', 'shadow_intensity'], crs='EPSG:4326')
+
+        # Get sun position
+        altitude, azimuth = self.calculate_sun_position(timestamp)
+
+        # If sun is below horizon, everything is in shadow
+        if altitude <= 0:
+            shadow_intensity = 1.0  # Full shadow
         else:
-            stats['avg_spacing_x'] = 0.0
-            stats['avg_spacing_y'] = 0.0
+            # Calculate shadow intensity based on sun altitude
+            # Lower sun = longer shadows = higher intensity
+            shadow_intensity = max(0, 1 - (altitude / 90))
 
-        return stats
+        # Get layout bounds
+        bounds = layout_gdf.total_bounds
+        minx, miny, maxx, maxy = bounds
+
+        # Create shadow grid
+        shadow_cells = []
+
+        x = minx
+        while x < maxx:
+            y = miny
+            while y < maxy:
+                cell = box(x, y, x + grid_resolution, y + grid_resolution)
+
+                # Check if cell intersects with any module
+                intersects = layout_gdf.intersects(cell).any()
+
+                if intersects:
+                    shadow_cells.append({
+                        'geometry': cell,
+                        'shadow_intensity': shadow_intensity,
+                        'sun_altitude': altitude,
+                        'sun_azimuth': azimuth
+                    })
+
+                y += grid_resolution
+            x += grid_resolution
+
+        # Create GeoDataFrame
+        if shadow_cells:
+            shadow_gdf = gpd.GeoDataFrame(shadow_cells, crs='EPSG:4326')
+        else:
+            shadow_gdf = gpd.GeoDataFrame(
+                columns=['geometry', 'shadow_intensity', 'sun_altitude', 'sun_azimuth'],
+                crs='EPSG:4326'
+            )
+
+        return shadow_gdf
+
+    def generate_shadow_report(
+        self,
+        layout_gdf: gpd.GeoDataFrame,
+        start_time: datetime,
+        end_time: datetime,
+        time_step_hours: int = 1
+    ) -> Dict:
+        """
+        Generate comprehensive shadow analysis report
+
+        Parameters:
+        -----------
+        layout_gdf : GeoDataFrame
+            Module layout
+        start_time : datetime
+            Start time for analysis
+        end_time : datetime
+            End time for analysis
+        time_step_hours : int
+            Time step in hours
+
+        Returns:
+        --------
+        dict : Shadow analysis report
+        """
+        # Time range
+        current_time = start_time
+        shadow_data = []
+
+        while current_time <= end_time:
+            altitude, azimuth = self.calculate_sun_position(current_time)
+
+            shadow_data.append({
+                'timestamp': current_time,
+                'sun_altitude': altitude,
+                'sun_azimuth': azimuth,
+                'is_daylight': altitude > 0
+            })
+
+            current_time = current_time.replace(hour=current_time.hour + time_step_hours)
+
+        # Create DataFrame
+        df = pd.DataFrame(shadow_data)
+
+        # Calculate statistics
+        daylight_hours = df[df['is_daylight']]['is_daylight'].count()
+        avg_altitude = df[df['is_daylight']]['sun_altitude'].mean()
+
+        report = {
+            'analysis_period': {
+                'start': start_time.isoformat(),
+                'end': end_time.isoformat(),
+                'time_step_hours': time_step_hours
+            },
+            'sun_statistics': {
+                'total_hours_analyzed': len(df),
+                'daylight_hours': int(daylight_hours),
+                'avg_sun_altitude': float(avg_altitude) if not pd.isna(avg_altitude) else 0.0,
+                'max_sun_altitude': float(df['sun_altitude'].max()),
+                'min_sun_altitude': float(df['sun_altitude'].min())
+            },
+            'shadow_timeline': df.to_dict('records')
+        }
+
+        return report
