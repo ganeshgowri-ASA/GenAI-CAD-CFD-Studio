@@ -53,3 +53,8 @@ scipy>=1.11.0
 # Optional CAD/CFD format support (install as needed)
 # ezdxf>=1.1.0  # For advanced DXF parsing
 # pythonOCC-core>=7.7.0  # For STEP, IGES, BREP support
+# AI Core Dependencies
+anthropic>=0.18.0
+opencv-python>=4.9.0
+Pillow>=10.0.0
+# Testing
