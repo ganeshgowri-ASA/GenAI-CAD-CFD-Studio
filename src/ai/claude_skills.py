@@ -1,358 +1,286 @@
 """
-Claude AI integration for CAD generation.
-
-This module provides Claude-powered natural language understanding for
-extracting intent, dimensions, and generating CAD descriptions.
+Claude AI Skills for Design Studio
+Handles AI-powered dimension extraction and design interpretation
 """
-
+import re
 import json
-from typing import Dict, List, Optional
-import anthropic
-
-from .prompt_templates import (
-    DIMENSION_EXTRACTION_TEMPLATE,
-    CLARIFICATION_TEMPLATE,
-    format_prompt,
-    get_template_for_agent
-)
-from .dimension_extractor import DimensionExtractor
+from typing import Dict, List, Optional, Any
 
 
 class ClaudeSkills:
     """
-    Claude AI integration for natural language CAD generation.
-
-    Provides methods for:
-    - Extracting intent and dimensions from natural language
-    - Generating CAD descriptions
-    - Clarifying ambiguous requests
+    AI skills for extracting CAD parameters from natural language
     """
 
-    def __init__(self, api_key: str):
+    # Common object types and their expected parameters
+    OBJECT_TEMPLATES = {
+        "box": ["length", "width", "height"],
+        "cube": ["size"],
+        "cylinder": ["radius", "height"],
+        "sphere": ["radius"],
+        "cone": ["radius", "height"],
+        "torus": ["major_radius", "minor_radius"],
+        "pipe": ["inner_radius", "outer_radius", "length"],
+        "plate": ["length", "width", "thickness"]
+    }
+
+    # Unit conversion patterns
+    UNIT_PATTERNS = {
+        "mm": ["mm", "millimeter", "millimeters"],
+        "cm": ["cm", "centimeter", "centimeters"],
+        "m": ["m", "meter", "meters"],
+        "inches": ["in", "inch", "inches", '"'],
+        "feet": ["ft", "foot", "feet", "'"]
+    }
+
+    def __init__(self, api_key: Optional[str] = None):
         """
-        Initialize Claude integration.
+        Initialize Claude skills
 
         Args:
-            api_key: Anthropic API key for Claude access
-
-        Raises:
-            ValueError: If api_key is empty or invalid
+            api_key: Optional Anthropic API key for Claude integration
         """
-        if not api_key or not api_key.strip():
-            raise ValueError("API key cannot be empty")
+        self.api_key = api_key
 
-        self.client = anthropic.Anthropic(api_key=api_key)
-        self.dimension_extractor = DimensionExtractor()
-        self.model = "claude-3-5-sonnet-20241022"  # Latest Claude model
-
-    def extract_intent_and_dimensions(self, prompt: str) -> Dict:
+    def extract_dimensions(self, prompt: str) -> Dict[str, Any]:
         """
-        Extract intent and dimensional information from a natural language prompt.
-
-        Uses Claude with structured output to identify:
-        - Object type (box, cylinder, sphere, custom shape, etc.)
-        - Dimensions with units
-        - Material specifications
-        - Design constraints
+        Extract CAD dimensions and parameters from natural language prompt
 
         Args:
-            prompt: Natural language CAD request
+            prompt: User's natural language description
 
         Returns:
-            Dictionary with extracted information:
-            {
-                'type': str (object type),
-                'dimensions': dict (dimensional parameters),
-                'unit': str (measurement unit),
-                'materials': str (material specification),
-                'constraints': list (design constraints),
-                'confidence': float (0-1, extraction confidence),
-                'ambiguities': list (unclear aspects)
-            }
-
-        Example:
-            >>> skills = ClaudeSkills(api_key="...")
-            >>> result = skills.extract_intent_and_dimensions("Create a 10cm x 5cm x 3cm box")
-            >>> result['type']  # Returns 'box'
-            >>> result['dimensions']  # Returns {'length': 0.1, 'width': 0.05, 'height': 0.03}
+            Dictionary containing extracted parameters
         """
-        # First try to extract dimensions using regex
-        basic_dims = self.dimension_extractor.parse_dimensions(prompt)
+        # Convert to lowercase for easier parsing
+        prompt_lower = prompt.lower()
 
-        # Prepare the extraction prompt
-        extraction_prompt = format_prompt(
-            DIMENSION_EXTRACTION_TEMPLATE,
-            {'prompt': prompt}
-        )
+        # Extract object type
+        object_type = self._extract_object_type(prompt_lower)
 
-        # Define the JSON schema for structured output
-        json_schema = {
-            "type": "object",
-            "properties": {
-                "object_type": {
-                    "type": "string",
-                    "description": "Type of CAD object (box, cylinder, sphere, cone, custom, etc.)"
-                },
-                "dimensions": {
-                    "type": "object",
-                    "description": "Dimensional parameters",
-                    "properties": {
-                        "length": {"type": "number"},
-                        "width": {"type": "number"},
-                        "height": {"type": "number"},
-                        "diameter": {"type": "number"},
-                        "radius": {"type": "number"},
-                        "thickness": {"type": "number"}
-                    }
-                },
-                "unit": {
-                    "type": "string",
-                    "description": "Measurement unit (mm, cm, m, in, ft)"
-                },
-                "materials": {
-                    "type": "string",
-                    "description": "Material specification"
-                },
-                "constraints": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Design constraints or requirements"
-                },
-                "confidence": {
-                    "type": "number",
-                    "description": "Confidence score 0-1"
-                },
-                "ambiguities": {
-                    "type": "array",
-                    "items": {"type": "string"},
-                    "description": "Unclear or missing information"
-                }
-            },
-            "required": ["object_type", "unit", "confidence"]
+        # Extract dimensions
+        dimensions = self._extract_numeric_dimensions(prompt)
+
+        # Extract unit
+        unit = self._extract_unit(prompt_lower)
+
+        # Build parameter dictionary
+        params = {
+            "object_type": object_type,
+            "unit": unit,
+            "description": prompt
         }
 
-        try:
-            # Call Claude with structured output
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=2048,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": extraction_prompt
-                    }
-                ],
-                temperature=0.3,  # Lower temperature for more consistent extraction
-                system=(
-                    "You are a CAD expert that extracts structured information from "
-                    "natural language descriptions. Always return valid JSON matching "
-                    "the specified schema. Be conservative with confidence scores."
-                )
-            )
+        # Add extracted dimensions
+        params.update(dimensions)
 
-            # Parse the response
-            response_text = response.content[0].text
+        # If no dimensions found, provide defaults based on object type
+        if not dimensions:
+            params.update(self._get_default_dimensions(object_type))
 
-            # Try to extract JSON from the response
-            json_match = None
-            if '```json' in response_text:
-                # Extract JSON from markdown code block
-                start = response_text.find('```json') + 7
-                end = response_text.find('```', start)
-                json_match = response_text[start:end].strip()
-            elif '{' in response_text:
-                # Try to find JSON object
-                start = response_text.find('{')
-                end = response_text.rfind('}') + 1
-                json_match = response_text[start:end]
+        return params
 
-            if json_match:
-                extracted_data = json.loads(json_match)
-            else:
-                # Fallback if JSON parsing fails
-                extracted_data = {
-                    'object_type': 'custom',
-                    'unit': basic_dims.get('original_unit', 'mm'),
-                    'confidence': 0.3,
-                    'ambiguities': ['Failed to parse Claude response']
-                }
-
-            # Merge with regex-extracted dimensions
-            if 'dimensions' not in extracted_data:
-                extracted_data['dimensions'] = {}
-
-            # Convert dimensions to meters if we have them from regex
-            for key in ['length', 'width', 'height', 'diameter', 'radius']:
-                if key in basic_dims and key not in extracted_data['dimensions']:
-                    extracted_data['dimensions'][key] = basic_dims[key]
-
-            # Ensure required fields
-            if 'materials' not in extracted_data:
-                extracted_data['materials'] = 'default'
-            if 'constraints' not in extracted_data:
-                extracted_data['constraints'] = []
-            if 'ambiguities' not in extracted_data:
-                extracted_data['ambiguities'] = []
-
-            # Rename object_type to type for consistency
-            if 'object_type' in extracted_data:
-                extracted_data['type'] = extracted_data.pop('object_type')
-
-            return extracted_data
-
-        except Exception as e:
-            # Fallback to basic extraction on error
-            return {
-                'type': 'custom',
-                'dimensions': basic_dims,
-                'unit': basic_dims.get('original_unit', 'mm'),
-                'materials': 'default',
-                'constraints': [],
-                'confidence': 0.5,
-                'ambiguities': [f'Error during Claude extraction: {str(e)}']
-            }
-
-    def generate_cad_description(self, prompt: str, agent: str = 'build123d') -> str:
+    def _extract_object_type(self, prompt: str) -> str:
         """
-        Generate a detailed CAD description or code for the specified agent.
+        Extract the object type from the prompt
 
         Args:
-            prompt: Natural language CAD request
-            agent: Target CAD agent ('zoo_kcl', 'adam_nl', 'build123d')
+            prompt: Lowercase prompt text
 
         Returns:
-            Generated CAD description or code
-
-        Example:
-            >>> skills = ClaudeSkills(api_key="...")
-            >>> code = skills.generate_cad_description(
-            ...     "Create a cylinder with 5cm diameter and 10cm height",
-            ...     agent='build123d'
-            ... )
+            Detected object type
         """
-        # First extract intent and dimensions
-        extracted = self.extract_intent_and_dimensions(prompt)
+        # Check for known object types
+        for obj_type in self.OBJECT_TEMPLATES.keys():
+            if obj_type in prompt:
+                return obj_type
 
-        # Get the appropriate template
-        template = get_template_for_agent(agent)
+        # Check for common synonyms
+        if "rectangular" in prompt or "block" in prompt:
+            return "box"
+        if "round" in prompt or "circular" in prompt:
+            if "flat" in prompt or "disc" in prompt:
+                return "cylinder"
+            return "sphere"
+        if "square" in prompt and ("plate" in prompt or "flat" in prompt):
+            return "plate"
 
-        # Format dimensions as string
-        dims_str = ', '.join(f"{k}: {v}" for k, v in extracted['dimensions'].items())
+        return "box"  # Default
 
-        # Format the prompt
-        formatted_prompt = format_prompt(template, {
-            'description': prompt,
-            'object_type': extracted['type'],
-            'dimensions': dims_str,
-            'unit': extracted['unit'],
-            'materials': extracted['materials'],
-            'constraints': ', '.join(extracted['constraints']) if extracted['constraints'] else 'none'
-        })
-
-        try:
-            # Generate CAD code/description
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=4096,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": formatted_prompt
-                    }
-                ],
-                temperature=0.4,  # Slightly higher for more creative code generation
-                system=(
-                    f"You are an expert in {agent} CAD generation. "
-                    "Generate clean, well-commented, production-ready code. "
-                    "Follow best practices and ensure dimensional accuracy."
-                )
-            )
-
-            return response.content[0].text
-
-        except Exception as e:
-            return f"# Error generating CAD description: {str(e)}\n# Original prompt: {prompt}"
-
-    def clarify_ambiguity(self, prompt: str, missing_params: List[str]) -> str:
+    def _extract_numeric_dimensions(self, prompt: str) -> Dict[str, float]:
         """
-        Generate clarifying questions for ambiguous or incomplete requests.
+        Extract numeric dimensions from the prompt
 
         Args:
-            prompt: Original natural language request
-            missing_params: List of missing or unclear parameters
+            prompt: User prompt
 
         Returns:
-            String containing clarifying questions
-
-        Example:
-            >>> skills = ClaudeSkills(api_key="...")
-            >>> questions = skills.clarify_ambiguity(
-            ...     "Create a box",
-            ...     missing_params=['length', 'width', 'height', 'unit']
-            ... )
-            >>> print(questions)
-            # What are the dimensions of the box?
-            # What unit of measurement should I use?
-            # ...
+            Dictionary of dimension name to value
         """
-        # Format the clarification prompt
-        clarification_prompt = format_prompt(
-            CLARIFICATION_TEMPLATE,
-            {
-                'prompt': prompt,
-                'missing_params': missing_params
-            }
-        )
+        dimensions = {}
 
-        try:
-            # Generate clarifying questions
-            response = self.client.messages.create(
-                model=self.model,
-                max_tokens=1024,
-                messages=[
-                    {
-                        "role": "user",
-                        "content": clarification_prompt
-                    }
-                ],
-                temperature=0.5,
-                system=(
-                    "You are a helpful CAD assistant. Generate clear, specific "
-                    "questions to gather missing information. Be friendly but technical."
-                )
-            )
+        # Patterns for dimension extraction
+        patterns = [
+            # "length 100mm" or "length: 100 mm"
+            (r'length[:\s]+(\d+\.?\d*)', 'length'),
+            (r'width[:\s]+(\d+\.?\d*)', 'width'),
+            (r'height[:\s]+(\d+\.?\d*)', 'height'),
+            (r'depth[:\s]+(\d+\.?\d*)', 'depth'),
+            (r'radius[:\s]+(\d+\.?\d*)', 'radius'),
+            (r'diameter[:\s]+(\d+\.?\d*)', 'diameter'),
+            (r'thickness[:\s]+(\d+\.?\d*)', 'thickness'),
+            (r'size[:\s]+(\d+\.?\d*)', 'size'),
+            # "100mm long"
+            (r'(\d+\.?\d*)\s*(?:mm|cm|m|in|inches|ft)?\s*long', 'length'),
+            (r'(\d+\.?\d*)\s*(?:mm|cm|m|in|inches|ft)?\s*wide', 'width'),
+            (r'(\d+\.?\d*)\s*(?:mm|cm|m|in|inches|ft)?\s*tall', 'height'),
+            (r'(\d+\.?\d*)\s*(?:mm|cm|m|in|inches|ft)?\s*high', 'height'),
+            # "100 x 50 x 30" format
+        ]
 
-            return response.content[0].text
+        for pattern, dim_name in patterns:
+            match = re.search(pattern, prompt.lower())
+            if match:
+                try:
+                    dimensions[dim_name] = float(match.group(1))
+                except (ValueError, IndexError):
+                    pass
 
-        except Exception as e:
-            # Fallback to basic questions
-            questions = []
-            for param in missing_params:
-                questions.append(f"- What is the {param}?")
+        # Try to extract from "X x Y x Z" format
+        dimension_match = re.search(r'(\d+\.?\d*)\s*x\s*(\d+\.?\d*)\s*x\s*(\d+\.?\d*)', prompt)
+        if dimension_match and not dimensions:
+            dimensions['length'] = float(dimension_match.group(1))
+            dimensions['width'] = float(dimension_match.group(2))
+            dimensions['height'] = float(dimension_match.group(3))
 
-            return "I need some additional information:\n" + "\n".join(questions)
+        # Convert diameter to radius if needed
+        if 'diameter' in dimensions and 'radius' not in dimensions:
+            dimensions['radius'] = dimensions['diameter'] / 2
 
-    def validate_and_extract(self, prompt: str) -> Dict:
+        return dimensions
+
+    def _extract_unit(self, prompt: str) -> str:
         """
-        Extract dimensions and validate them in one step.
+        Extract the unit of measurement from the prompt
 
         Args:
-            prompt: Natural language CAD request
+            prompt: Lowercase prompt text
 
         Returns:
-            Dictionary with extracted and validated dimensions, plus validation results
-
-        Example:
-            >>> result = skills.validate_and_extract("10cm box")
-            >>> result['valid']  # True/False
-            >>> result['suggestions']  # List of suggestions
+            Detected unit (defaults to 'mm')
         """
-        extracted = self.extract_intent_and_dimensions(prompt)
-        is_valid = self.dimension_extractor.validate_dimensions(extracted['dimensions'])
-        suggestions = self.dimension_extractor.suggest_corrections(extracted['dimensions'])
+        for unit, patterns in self.UNIT_PATTERNS.items():
+            for pattern in patterns:
+                if pattern in prompt:
+                    return unit
 
-        return {
-            **extracted,
-            'valid': is_valid,
-            'suggestions': suggestions
+        return "mm"  # Default unit
+
+    def _get_default_dimensions(self, object_type: str) -> Dict[str, float]:
+        """
+        Get default dimensions for an object type
+
+        Args:
+            object_type: Type of object
+
+        Returns:
+            Dictionary of default dimensions
+        """
+        defaults = {
+            "box": {"length": 100, "width": 50, "height": 30},
+            "cube": {"size": 50},
+            "cylinder": {"radius": 25, "height": 100},
+            "sphere": {"radius": 50},
+            "cone": {"radius": 50, "height": 100},
+            "torus": {"major_radius": 50, "minor_radius": 10},
+            "pipe": {"inner_radius": 20, "outer_radius": 25, "length": 100},
+            "plate": {"length": 100, "width": 100, "thickness": 5}
         }
+
+        return defaults.get(object_type, {"length": 100, "width": 50, "height": 30})
+
+    def generate_ai_response(self, prompt: str, extracted_params: Dict[str, Any]) -> str:
+        """
+        Generate an AI response confirming the extracted parameters
+
+        Args:
+            prompt: User's original prompt
+            extracted_params: Extracted parameters
+
+        Returns:
+            AI response text
+        """
+        object_type = extracted_params.get("object_type", "object")
+        unit = extracted_params.get("unit", "mm")
+
+        # Build response
+        response_parts = [
+            f"I understand you want to create a **{object_type}**.",
+            "",
+            "Here's what I've extracted:"
+        ]
+
+        # Add dimensions
+        for key, value in extracted_params.items():
+            if key not in ["object_type", "unit", "description"] and isinstance(value, (int, float)):
+                response_parts.append(f"- **{key.replace('_', ' ').title()}**: {value} {unit}")
+
+        response_parts.extend([
+            "",
+            "Please review and adjust the parameters in the form below, then click **Generate** to create your 3D model."
+        ])
+
+        return "\n".join(response_parts)
+
+    def suggest_improvements(self, params: Dict[str, Any]) -> List[str]:
+        """
+        Suggest improvements or considerations for the design
+
+        Args:
+            params: Current design parameters
+
+        Returns:
+            List of suggestions
+        """
+        suggestions = []
+
+        object_type = params.get("object_type", "")
+
+        # Aspect ratio checks
+        if "length" in params and "width" in params:
+            ratio = params["length"] / params["width"]
+            if ratio > 10:
+                suggestions.append("💡 High length-to-width ratio. Consider if this is intentional.")
+
+        # Thickness checks for plates
+        if object_type == "plate" and "thickness" in params:
+            if params["thickness"] > params.get("length", 100) / 2:
+                suggestions.append("💡 Thickness is quite large relative to length. Consider reducing.")
+
+        # Volume checks
+        if "radius" in params and "height" in params:
+            volume = 3.14159 * (params["radius"] ** 2) * params["height"]
+            if volume > 1000000:
+                suggestions.append(f"💡 Large volume (~{volume/1000000:.1f}L). Ensure this is correct.")
+
+        return suggestions
+
+    def get_suggested_materials(self, object_type: str) -> List[str]:
+        """
+        Get suggested materials based on object type
+
+        Args:
+            object_type: Type of object
+
+        Returns:
+            List of suggested materials
+        """
+        materials = {
+            "box": ["Aluminum", "Steel", "Plastic (ABS)", "Wood"],
+            "cylinder": ["Aluminum", "Steel", "Brass", "Plastic (PLA)"],
+            "plate": ["Aluminum", "Steel", "Acrylic", "Carbon Fiber"],
+            "pipe": ["Steel", "Copper", "PVC", "Stainless Steel"],
+            "sphere": ["Steel", "Plastic (ABS)", "Rubber"],
+        }
+
+        return materials.get(object_type, ["Aluminum", "Steel", "Plastic"])
