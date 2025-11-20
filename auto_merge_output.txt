@@ -1,0 +1,257 @@
+=========================================
+Merging: CAD generation engines
+Branch: claude/cad-generation-engines-01NPSqbUYgG87F9SQchn9g4z
+=========================================
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+Auto-merging pytest.ini
+CONFLICT (add/add): Merge conflict in pytest.ini
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging setup.py
+CONFLICT (add/add): Merge conflict in setup.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: README.md
+Resolving: pytest.ini
+Resolving: requirements.txt
+Resolving: setup.py
+[main c99417d] Merge claude/cad-generation-engines-01NPSqbUYgG87F9SQchn9g4z: CAD generation engines
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: File import UI preview
+Branch: claude/file-import-ui-preview-01H17yM5qz3cknno4y2Zn3xg
+=========================================
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/__init__.py
+Auto-merging src/io/__init__.py
+Auto-merging src/io/universal_importer.py
+CONFLICT (add/add): Merge conflict in src/io/universal_importer.py
+Auto-merging src/ui/__init__.py
+Auto-merging src/ui/components/__init__.py
+Auto-merging src/ui/file_import.py
+CONFLICT (add/add): Merge conflict in src/ui/file_import.py
+Auto-merging tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: requirements.txt
+Resolving: src/io/universal_importer.py
+Resolving: src/ui/file_import.py
+[main 2f5b13b] Merge claude/file-import-ui-preview-01H17yM5qz3cknno4y2Zn3xg: File import UI preview
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: AI core Claude integration
+Branch: claude/ai-core-claude-integration-018txitCJsd3gjqkMmzG592y
+=========================================
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: requirements.txt
+[main 4cfb21f] Merge claude/ai-core-claude-integration-018txitCJsd3gjqkMmzG592y: AI core Claude integration
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: Design studio UI
+Branch: claude/design-studio-ui-01Gh7WaMPA8UGFsnUcmxhCnQ
+=========================================
+Auto-merging .env.example
+CONFLICT (add/add): Merge conflict in .env.example
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+Auto-merging app.py
+CONFLICT (add/add): Merge conflict in app.py
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/__init__.py
+Auto-merging src/ai/__init__.py
+Auto-merging src/ai/claude_skills.py
+CONFLICT (add/add): Merge conflict in src/ai/claude_skills.py
+Auto-merging src/ui/__init__.py
+Auto-merging src/ui/components/__init__.py
+Auto-merging src/ui/design_studio.py
+CONFLICT (add/add): Merge conflict in src/ui/design_studio.py
+Auto-merging tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: .env.example
+Resolving: README.md
+Resolving: app.py
+Resolving: requirements.txt
+Resolving: src/ai/claude_skills.py
+Resolving: src/ui/design_studio.py
+[main 3343fdd] Merge claude/design-studio-ui-01Gh7WaMPA8UGFsnUcmxhCnQ: Design studio UI
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: Geospatial solar PV layout
+Branch: claude/geospatial-solar-pv-layout-01Rz11DkZd2PHTrPkhDvJYKM
+=========================================
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging setup.py
+CONFLICT (add/add): Merge conflict in setup.py
+Auto-merging src/__init__.py
+CONFLICT (add/add): Merge conflict in src/__init__.py
+Auto-merging tests/__init__.py
+CONFLICT (add/add): Merge conflict in tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: requirements.txt
+Resolving: setup.py
+Resolving: src/__init__.py
+Resolving: tests/__init__.py
+[main ae2c67a] Merge claude/geospatial-solar-pv-layout-01Rz11DkZd2PHTrPkhDvJYKM: Geospatial solar PV layout
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: Solar PV layout designer
+Branch: claude/solar-pv-layout-designer-01MZ4Fio6GmAeMJhZfdLLbg8
+=========================================
+Auto-merging .streamlit/config.toml
+CONFLICT (add/add): Merge conflict in .streamlit/config.toml
+Auto-merging app.py
+CONFLICT (add/add): Merge conflict in app.py
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/__init__.py
+Auto-merging src/geospatial/__init__.py
+Auto-merging src/geospatial/layout_optimizer.py
+CONFLICT (add/add): Merge conflict in src/geospatial/layout_optimizer.py
+Auto-merging src/ui/__init__.py
+Auto-merging src/ui/components/__init__.py
+Auto-merging src/ui/layout_generator.py
+CONFLICT (add/add): Merge conflict in src/ui/layout_generator.py
+Auto-merging tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: .streamlit/config.toml
+Resolving: app.py
+Resolving: requirements.txt
+Resolving: src/geospatial/layout_optimizer.py
+Resolving: src/ui/layout_generator.py
+[main 63971f9] Merge claude/solar-pv-layout-designer-01MZ4Fio6GmAeMJhZfdLLbg8: Solar PV layout designer
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: CFD OpenFOAM integration
+Branch: claude/cfd-openfoam-integration-01PRUcYSf42F82BpfZVyZhtw
+=========================================
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/__init__.py
+CONFLICT (add/add): Merge conflict in src/__init__.py
+Auto-merging tests/__init__.py
+CONFLICT (add/add): Merge conflict in tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: requirements.txt
+Resolving: src/__init__.py
+Resolving: tests/__init__.py
+[main c8ee4a2] Merge claude/cfd-openfoam-integration-01PRUcYSf42F82BpfZVyZhtw: CFD OpenFOAM integration
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: CFD analysis wizard UI
+Branch: claude/cfd-analysis-wizard-ui-017uS87TprcbnrrUMtViWPLX
+=========================================
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging setup.py
+CONFLICT (add/add): Merge conflict in setup.py
+Auto-merging src/__init__.py
+Auto-merging src/cfd/__init__.py
+Auto-merging src/cfd/gmsh_mesher.py
+CONFLICT (add/add): Merge conflict in src/cfd/gmsh_mesher.py
+Auto-merging src/cfd/pyfoam_wrapper.py
+CONFLICT (add/add): Merge conflict in src/cfd/pyfoam_wrapper.py
+Auto-merging src/cfd/result_parser.py
+CONFLICT (add/add): Merge conflict in src/cfd/result_parser.py
+Auto-merging src/ui/__init__.py
+Auto-merging src/ui/cfd_analysis.py
+CONFLICT (add/add): Merge conflict in src/ui/cfd_analysis.py
+Auto-merging src/ui/components/__init__.py
+Auto-merging tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: requirements.txt
+Resolving: setup.py
+Resolving: src/cfd/gmsh_mesher.py
+Resolving: src/cfd/pyfoam_wrapper.py
+Resolving: src/cfd/result_parser.py
+Resolving: src/ui/cfd_analysis.py
+[main b28d224] Merge claude/cfd-analysis-wizard-ui-017uS87TprcbnrrUMtViWPLX: CFD analysis wizard UI
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: PyVista visualization
+Branch: claude/pyvista-visualization-module-01ALvxSxy7vBpRGPMeszhif2
+=========================================
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/visualization/__init__.py
+Auto-merging src/visualization/pyvista_viewer.py
+CONFLICT (add/add): Merge conflict in src/visualization/pyvista_viewer.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: README.md
+Resolving: requirements.txt
+Resolving: src/visualization/pyvista_viewer.py
+[main 1f752a9] Merge claude/pyvista-visualization-module-01ALvxSxy7vBpRGPMeszhif2: PyVista visualization
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: Agent config UI
+Branch: claude/agent-config-ui-01FqhoTAuBun5gNUD9MeE8UQ
+=========================================
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/__init__.py
+Auto-merging src/ui/__init__.py
+Auto-merging src/ui/agent_config.py
+CONFLICT (add/add): Merge conflict in src/ui/agent_config.py
+Auto-merging src/utils/__init__.py
+Auto-merging tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: README.md
+Resolving: requirements.txt
+Resolving: src/ui/agent_config.py
+[main 3d279ce] Merge claude/agent-config-ui-01FqhoTAuBun5gNUD9MeE8UQ: Agent config UI
+✅ Conflicts resolved and merged
+
+=========================================
+Merging: Project history UI
+Branch: claude/project-history-ui-018BANKgvj5nq78gMdwETxFx
+=========================================
+Auto-merging .gitignore
+CONFLICT (content): Merge conflict in .gitignore
+Auto-merging README.md
+CONFLICT (content): Merge conflict in README.md
+Auto-merging requirements.txt
+CONFLICT (add/add): Merge conflict in requirements.txt
+Auto-merging src/__init__.py
+Auto-merging src/ui/__init__.py
+Auto-merging src/ui/project_history.py
+CONFLICT (add/add): Merge conflict in src/ui/project_history.py
+Auto-merging src/utils/__init__.py
+Auto-merging tests/__init__.py
+Automatic merge failed; fix conflicts and then commit the result.
+⚠️ Conflicts detected - resolving automatically
+Resolving: .gitignore
+Resolving: README.md
+Resolving: requirements.txt
+Resolving: src/ui/project_history.py
+[main be22c21] Merge claude/project-history-ui-018BANKgvj5nq78gMdwETxFx: Project history UI
+✅ Conflicts resolved and merged
+
+=========================================
+All branches merged successfully!
+=========================================

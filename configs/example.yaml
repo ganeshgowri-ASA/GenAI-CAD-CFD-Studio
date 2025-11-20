@@ -1,0 +1,41 @@
+# Example configuration file for GenAI CAD/CFD Studio
+
+# Application settings
+app:
+  name: "GenAI CAD/CFD Studio"
+  version: "0.1.0"
+  debug: false
+
+# Database configuration
+database:
+  host: "localhost"
+  port: 5432
+  name: "cad_cfd_db"
+  user: "${DB_USER:admin}"
+  password: "${DB_PASSWORD:}"
+
+# API configuration
+api:
+  openai:
+    key: "${OPENAI_API_KEY:}"
+    model: "gpt-4"
+  zoo:
+    key: "${ZOO_API_KEY:}"
+    endpoint: "https://api.zoo.dev"
+
+# Logging configuration
+logging:
+  level: "INFO"
+  max_bytes: 10485760  # 10MB
+  backup_count: 5
+
+# CAD/CFD settings
+cad:
+  default_unit: "m"
+  precision: 0.001
+  max_vertices: 1000000
+
+cfd:
+  solver: "OpenFOAM"
+  mesh_quality_threshold: 0.3
+  convergence_criteria: 1e-6

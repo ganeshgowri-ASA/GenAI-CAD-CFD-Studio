@@ -205,3 +205,13 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# GenAI-CAD-CFD-Studio Project Data
+projects/backups/
+projects/models/
+projects/results/
+projects/configs/
+projects/audit_logs/
+
+# Streamlit secrets (contains API tokens)
+.streamlit/secrets.toml
