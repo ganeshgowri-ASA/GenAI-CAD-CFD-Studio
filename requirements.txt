@@ -165,3 +165,22 @@ imageio-ffmpeg>=0.4.9  # For video export
 # Visualization enhancements
 colorcet>=3.0.0  # Additional colormaps
 # Development
+# GenAI CAD CFD Studio - Requirements
+# Agent Configuration and Core Dependencies
+# Web Framework
+# Encryption and Security
+cryptography>=41.0.0
+# Environment Management
+# HTTP Requests
+pytest-mock>=3.12.0
+# Type Checking
+mypy>=1.7.0
+black>=23.11.0
+flake8>=6.1.0
+isort>=5.12.0
+# Logging
+coloredlogs>=15.0.1
+# Data Processing (for future CAD/CFD features)
+# Optional: CAD/CFD specific libraries (can be added as needed)
+# build123d>=0.3.0
+# cadquery>=2.3.0

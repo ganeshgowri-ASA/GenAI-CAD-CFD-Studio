@@ -205,3 +205,24 @@ cython_debug/
 marimo/_static/
 marimo/_lsp/
 __marimo__/
+
+# GenAI CAD CFD Studio - Secrets and API Keys
+# CRITICAL: Never commit these files as they contain encrypted API keys
+.streamlit/secrets.json
+.streamlit/secrets.toml
+.streamlit/.key
+.streamlit/agents.json
+
+# Local configuration
+config/local.json
+config/secrets.json
+
+# API Key backups
+*.key
+*_secrets.json
+
+# CAD/CFD output files (optional - uncomment if needed)
+# *.step
+# *.stl
+# *.iges
+# *.brep
