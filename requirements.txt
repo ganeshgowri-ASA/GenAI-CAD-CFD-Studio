@@ -1,4 +1,5 @@
 <<<<<<< HEAD
+<<<<<<< HEAD
 # GenAI CAD-CFD Studio - Dependencies
 
 # Core Framework
@@ -14,6 +15,7 @@ python-dateutil>=2.8.2
 tqdm>=4.66.0
 loguru>=0.7.0
 coloredlogs>=15.0.1
+PyGithub>=2.1.1
 
 # Security
 cryptography>=41.0.0
@@ -79,10 +81,24 @@ python-dotenv>=1.0.0
 # HTTP Requests
 requests>=2.31.0
 >>>>>>> origin/claude/agent-config-ui-01FqhoTAuBun5gNUD9MeE8UQ
+=======
+# GenAI-CAD-CFD-Studio Requirements
+# Project History & Version Control UI Dependencies
+
+# Core Web Framework
+streamlit>=1.28.0
+
+# GitHub API Integration
+PyGithub>=2.1.1
+
+# Date and Time Utilities
+python-dateutil>=2.8.2
+>>>>>>> origin/claude/project-history-ui-018BANKgvj5nq78gMdwETxFx
 
 # Testing
 pytest>=7.4.0
 pytest-cov>=4.1.0
+<<<<<<< HEAD
 <<<<<<< HEAD
 pytest-mock>=3.11.0
 coverage>=6.0
@@ -134,3 +150,17 @@ pandas>=2.0.0
 # build123d>=0.3.0
 # cadquery>=2.3.0
 >>>>>>> origin/claude/agent-config-ui-01FqhoTAuBun5gNUD9MeE8UQ
+=======
+pytest-mock>=3.11.1
+
+# Data Processing
+pandas>=2.0.0
+
+# Optional: Database Support for Audit Logs
+# sqlalchemy>=2.0.0
+
+# Code Quality
+# ruff>=0.1.0
+# black>=23.0.0
+# mypy>=1.5.0
+>>>>>>> origin/claude/project-history-ui-018BANKgvj5nq78gMdwETxFx
