@@ -18,6 +18,11 @@ from collections import deque
 logger = logging.getLogger(__name__)
 
 
+class PaymentRequiredError(Exception):
+    """Exception raised when Zoo.dev returns 402 Payment Required."""
+    pass
+
+
 class RateLimiter:
     """Simple rate limiter for API requests."""
 
@@ -181,6 +186,12 @@ class ZooDevConnector:
                     json={'prompt': prompt},
                     timeout=30
                 )
+
+                # Check for 402 Payment Required specifically
+                if response.status_code == 402:
+                    logger.warning("Zoo.dev returned 402 Payment Required")
+                    raise PaymentRequiredError("Zoo.dev API requires payment or quota exceeded")
+
                 response.raise_for_status()
 
                 data = response.json()
@@ -195,6 +206,10 @@ class ZooDevConnector:
                 result = self._poll_task_status(task_id)
                 return result
 
+            except PaymentRequiredError:
+                # Don't retry on payment errors, raise immediately
+                logger.error("Zoo.dev payment required - no retry")
+                raise
             except requests.RequestException as e:
                 logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
                 if attempt < max_retries - 1:
