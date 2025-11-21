@@ -1,8 +1,10 @@
 """
-Zoo.dev API Connector - KCL-based CAD generation.
+Zoo.dev API Connector - Text-to-CAD generation.
 
 This module provides an interface to Zoo.dev's text-to-CAD API,
-generating KCL (KittyCAD Language) code and executing it to create 3D models.
+generating 3D CAD models from natural language descriptions.
+Supports multiple output formats (STEP, STL, OBJ, GLTF, GLB, etc.)
+with async task polling and automatic file downloading.
 """
 
 import time
@@ -58,11 +60,12 @@ class ZooDevConnector:
     """
     Connector for Zoo.dev text-to-CAD API.
 
-    Handles KCL code generation, execution, and model downloading
-    with rate limiting and error handling.
+    Handles CAD model generation from text prompts with async task polling,
+    multiple output format support, and automatic file downloading.
+    Includes rate limiting and comprehensive error handling.
     """
 
-    API_BASE_URL = "https://api.zoo.dev/v1"
+    API_BASE_URL = "https://api.zoo.dev"
 
     def __init__(self, api_key: Optional[str] = None, mock_mode: bool = False):
         """
@@ -88,46 +91,109 @@ class ZooDevConnector:
 
         logger.info(f"Zoo.dev connector initialized (mock_mode={mock_mode})")
 
-    def generate_kcl(self, prompt: str, max_retries: int = 3) -> str:
+    def _poll_task_status(
+        self,
+        task_id: str,
+        timeout: int = 300,
+        poll_interval: int = 5
+    ) -> Dict[str, Any]:
         """
-        Generate KCL code from natural language prompt.
+        Poll async task status until completion.
+
+        Args:
+            task_id: The async task ID to poll
+            timeout: Maximum time to wait in seconds (default: 300)
+            poll_interval: Time between polls in seconds (default: 5)
+
+        Returns:
+            dict: Task result data including outputs
+
+        Raises:
+            TimeoutError: If task doesn't complete within timeout
+            ValueError: If task fails
+        """
+        start_time = time.time()
+
+        while True:
+            elapsed = time.time() - start_time
+            if elapsed > timeout:
+                raise TimeoutError(f"Task {task_id} did not complete within {timeout}s")
+
+            try:
+                response = self.session.get(
+                    f"{self.API_BASE_URL}/async/operations/{task_id}",
+                    timeout=30
+                )
+                response.raise_for_status()
+                data = response.json()
+
+                status = data.get('status', '').lower()
+                logger.info(f"Task {task_id} status: {status}")
+
+                if status == 'completed':
+                    logger.info(f"Task {task_id} completed successfully")
+                    return data
+                elif status == 'failed':
+                    error_msg = data.get('error', 'Unknown error')
+                    raise ValueError(f"Task {task_id} failed: {error_msg}")
+
+                # Status is 'queued' or 'in_progress', continue polling
+                time.sleep(poll_interval)
+
+            except requests.RequestException as e:
+                logger.warning(f"Error polling task {task_id}: {e}")
+                time.sleep(poll_interval)
+
+    def generate_cad_model(
+        self,
+        prompt: str,
+        output_format: str = "step",
+        max_retries: int = 3
+    ) -> Dict[str, Any]:
+        """
+        Generate CAD model from natural language prompt using Zoo.dev API.
 
         Args:
             prompt: Natural language description of desired CAD model
+            output_format: Output format (step, stl, obj, gltf, glb, etc.)
             max_retries: Maximum number of retry attempts on failure
 
         Returns:
-            str: Generated KCL code
+            dict: Task result with 'outputs', 'id', 'status', etc.
 
         Raises:
             requests.RequestException: If API request fails after retries
-            ValueError: If prompt is empty
+            ValueError: If prompt is empty or task fails
         """
         if not prompt or not prompt.strip():
             raise ValueError("Prompt cannot be empty")
 
         if self.mock_mode:
-            return self._mock_generate_kcl(prompt)
+            return self._mock_generate_cad_model(prompt, output_format)
 
         self.rate_limiter.acquire()
 
         for attempt in range(max_retries):
             try:
+                # Submit text-to-CAD request
                 response = self.session.post(
-                    f"{self.API_BASE_URL}/text-to-cad/generate-kcl",
+                    f"{self.API_BASE_URL}/ai/text-to-cad/{output_format}",
                     json={'prompt': prompt},
                     timeout=30
                 )
                 response.raise_for_status()
 
                 data = response.json()
-                kcl_code = data.get('kcl_code', '')
+                task_id = data.get('id')
 
-                if not kcl_code:
-                    raise ValueError("Empty KCL code received from API")
+                if not task_id:
+                    raise ValueError("No task ID received from API")
 
-                logger.info(f"KCL code generated successfully (length: {len(kcl_code)})")
-                return kcl_code
+                logger.info(f"Text-to-CAD task created: {task_id}")
+
+                # Poll for completion
+                result = self._poll_task_status(task_id)
+                return result
 
             except requests.RequestException as e:
                 logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
@@ -139,145 +205,150 @@ class ZooDevConnector:
                     logger.error("All retry attempts exhausted")
                     raise
 
-    def execute_kcl(self, code: str, max_retries: int = 3) -> str:
-        """
-        Execute KCL code and get model URL.
-
-        Args:
-            code: KCL code to execute
-            max_retries: Maximum number of retry attempts on failure
-
-        Returns:
-            str: URL to the generated 3D model
-
-        Raises:
-            requests.RequestException: If API request fails after retries
-            ValueError: If code is empty
-        """
-        if not code or not code.strip():
-            raise ValueError("KCL code cannot be empty")
-
-        if self.mock_mode:
-            return self._mock_execute_kcl(code)
-
-        self.rate_limiter.acquire()
-
-        for attempt in range(max_retries):
-            try:
-                response = self.session.post(
-                    f"{self.API_BASE_URL}/text-to-cad/execute-kcl",
-                    json={'code': code},
-                    timeout=60
-                )
-                response.raise_for_status()
-
-                data = response.json()
-                model_url = data.get('model_url', '')
-
-                if not model_url:
-                    raise ValueError("Empty model URL received from API")
-
-                logger.info(f"KCL code executed successfully: {model_url}")
-                return model_url
-
-            except requests.RequestException as e:
-                logger.warning(f"Attempt {attempt + 1}/{max_retries} failed: {e}")
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    logger.info(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                else:
-                    logger.error("All retry attempts exhausted")
-                    raise
-
-    def download_model(
+    def download_output_file(
         self,
-        url: str,
+        outputs: Dict[str, Any],
+        file_key: str,
         output_path: str,
         max_retries: int = 3
     ) -> None:
         """
-        Download model from URL to local file.
+        Download a specific output file from task results.
 
         Args:
-            url: URL of the model to download
-            output_path: Local path to save the model
+            outputs: The 'outputs' dict from completed task
+            file_key: Key of the file to download (e.g., 'source.step')
+            output_path: Local path to save the file
             max_retries: Maximum number of retry attempts on failure
 
         Raises:
             requests.RequestException: If download fails after retries
+            KeyError: If file_key not found in outputs
         """
         if self.mock_mode:
-            self._mock_download_model(url, output_path)
+            self._mock_download_model(file_key, output_path)
             return
 
+        if file_key not in outputs:
+            available_keys = list(outputs.keys())
+            raise KeyError(
+                f"File '{file_key}' not found in outputs. "
+                f"Available files: {available_keys}"
+            )
+
+        file_data = outputs[file_key]
+
+        # Handle both direct bytes and URL references
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
 
-        for attempt in range(max_retries):
-            try:
-                response = self.session.get(url, stream=True, timeout=120)
-                response.raise_for_status()
+        # If file_data is bytes, write directly
+        if isinstance(file_data, bytes):
+            with open(output_path, 'wb') as f:
+                f.write(file_data)
+            logger.info(f"File saved successfully to {output_path}")
+            return
 
-                with open(output_path, 'wb') as f:
-                    for chunk in response.iter_content(chunk_size=8192):
-                        if chunk:
-                            f.write(chunk)
+        # If it's a string (URL), download from URL
+        if isinstance(file_data, str):
+            for attempt in range(max_retries):
+                try:
+                    response = self.session.get(file_data, stream=True, timeout=120)
+                    response.raise_for_status()
 
-                logger.info(f"Model downloaded successfully to {output_path}")
-                return
+                    with open(output_path, 'wb') as f:
+                        for chunk in response.iter_content(chunk_size=8192):
+                            if chunk:
+                                f.write(chunk)
 
-            except requests.RequestException as e:
-                logger.warning(f"Download attempt {attempt + 1}/{max_retries} failed: {e}")
-                if attempt < max_retries - 1:
-                    wait_time = 2 ** attempt
-                    logger.info(f"Retrying in {wait_time} seconds...")
-                    time.sleep(wait_time)
-                else:
-                    logger.error("All download attempts exhausted")
-                    raise
+                    logger.info(f"File downloaded successfully to {output_path}")
+                    return
+
+                except requests.RequestException as e:
+                    logger.warning(f"Download attempt {attempt + 1}/{max_retries} failed: {e}")
+                    if attempt < max_retries - 1:
+                        wait_time = 2 ** attempt
+                        logger.info(f"Retrying in {wait_time} seconds...")
+                        time.sleep(wait_time)
+                    else:
+                        logger.error("All download attempts exhausted")
+                        raise
+
+        raise ValueError(f"Unexpected file data type: {type(file_data)}")
 
     def generate_model(
         self,
         prompt: str,
-        output_path: Optional[str] = None
+        output_path: Optional[str] = None,
+        output_format: str = "step"
     ) -> Dict[str, Any]:
         """
-        Complete workflow: generate KCL, execute, and optionally download.
+        Complete workflow: generate CAD model and optionally download.
 
         Args:
             prompt: Natural language description of desired CAD model
             output_path: If provided, download model to this path
+            output_format: Output format (step, stl, obj, gltf, glb, etc.)
 
         Returns:
-            dict: Contains 'kcl_code', 'model_url', and optionally 'local_path'
+            dict: Contains task result with 'outputs', 'id', 'status', etc.
+                  Includes backward-compatible 'kcl_code' and 'model_url' fields.
+                  If output_path provided, also includes 'local_path'
         """
-        result = {}
+        # Generate CAD model using new API
+        logger.info(f"Generating {output_format.upper()} model from prompt: {prompt[:100]}...")
+        result = self.generate_cad_model(prompt, output_format)
 
-        # Generate KCL
-        logger.info(f"Generating KCL from prompt: {prompt[:100]}...")
-        kcl_code = self.generate_kcl(prompt)
-        result['kcl_code'] = kcl_code
+        # Add backward compatibility fields
+        if 'code' in result:
+            result['kcl_code'] = result['code']
 
-        # Execute KCL
-        logger.info("Executing KCL code...")
-        model_url = self.execute_kcl(kcl_code)
-        result['model_url'] = model_url
+        # Try to extract a primary model URL from outputs
+        outputs = result.get('outputs', {})
+        if outputs:
+            # Prefer the requested format, or use first available
+            file_key = f"source.{output_format}"
+            if file_key not in outputs:
+                # Find any matching format
+                for key in outputs.keys():
+                    if key.endswith(f".{output_format}"):
+                        file_key = key
+                        break
+                else:
+                    # Use first available output
+                    file_key = next(iter(outputs.keys()))
+
+            result['model_url'] = outputs.get(file_key, '')
 
         # Download if requested
-        if output_path:
-            logger.info(f"Downloading model to {output_path}...")
-            self.download_model(model_url, output_path)
+        if output_path and outputs:
+            file_key = f"source.{output_format}"
+
+            # If exact key not found, try to find any matching format
+            if file_key not in outputs:
+                for key in outputs.keys():
+                    if key.endswith(f".{output_format}"):
+                        file_key = key
+                        break
+
+            logger.info(f"Downloading {file_key} to {output_path}...")
+            self.download_output_file(outputs, file_key, output_path)
             result['local_path'] = str(output_path)
 
         logger.info("Model generation complete")
         return result
 
     # Mock methods for testing
-    def _mock_generate_kcl(self, prompt: str) -> str:
-        """Generate mock KCL code for testing."""
-        logger.info(f"[MOCK] Generating KCL for: {prompt[:50]}...")
-        return f"""// Mock KCL generated from prompt: {prompt[:50]}
+    def _mock_generate_cad_model(
+        self,
+        prompt: str,
+        output_format: str
+    ) -> Dict[str, Any]:
+        """Generate mock CAD model result for testing."""
+        logger.info(f"[MOCK] Generating {output_format} model for: {prompt[:50]}...")
+        time.sleep(1)  # Simulate processing time
+
+        mock_kcl = f"""// Mock KCL generated from prompt: {prompt[:50]}
 const box = startSketchOn('XY')
   |> startProfileAt([0, 0], %)
   |> line([0, 10], %)
@@ -287,18 +358,27 @@ const box = startSketchOn('XY')
   |> extrude(5, %)
 """
 
-    def _mock_execute_kcl(self, code: str) -> str:
-        """Generate mock model URL for testing."""
-        logger.info("[MOCK] Executing KCL code...")
-        mock_hash = hash(code) % 1000000
-        return f"https://mock-zoo-dev.example.com/models/mock-{mock_hash}.glb"
+        mock_id = f"mock-task-{hash(prompt) % 1000000}"
+        mock_outputs = {
+            f"source.{output_format}": f"https://mock-zoo.example.com/files/{mock_id}.{output_format}",
+            "source.gltf": f"https://mock-zoo.example.com/files/{mock_id}.gltf"
+        }
 
-    def _mock_download_model(self, url: str, output_path: str) -> None:
+        return {
+            'id': mock_id,
+            'status': 'Completed',
+            'prompt': prompt,
+            'output_format': output_format,
+            'outputs': mock_outputs,
+            'code': mock_kcl
+        }
+
+    def _mock_download_model(self, file_key: str, output_path: str) -> None:
         """Create mock model file for testing."""
-        logger.info(f"[MOCK] Downloading from {url} to {output_path}")
+        logger.info(f"[MOCK] Downloading {file_key} to {output_path}")
         output_path = Path(output_path)
         output_path.parent.mkdir(parents=True, exist_ok=True)
-        output_path.write_text(f"Mock model data from {url}\n")
+        output_path.write_text(f"Mock model data for {file_key}\n")
 
     def __enter__(self):
         """Context manager entry."""
