@@ -58,6 +58,12 @@ from .cad_validator import (
     validate_with_report
 )
 
+# Model Generator
+from .model_generator import (
+    CADModelGenerator,
+    CADGenerationResult
+)
+
 __all__ = [
     # Version
     '__version__',
@@ -71,6 +77,10 @@ __all__ = [
     'CADAgent',
     'CADResult',
     'UnifiedCADInterface',
+
+    # Model Generator
+    'CADModelGenerator',
+    'CADGenerationResult',
 
     # Validation
     'ValidationIssue',
