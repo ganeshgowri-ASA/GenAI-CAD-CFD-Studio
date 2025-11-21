@@ -5,7 +5,8 @@ This module provides a comprehensive interface for creating CAD models using
 the build123d library, supporting primitives, operations, and boolean operations.
 """
 
-from typing import Dict, Any, Optional, Union, List
+from __future__ import annotations
+from typing import Dict, Any, Optional, Union, List, TYPE_CHECKING
 from pathlib import Path
 import logging
 
