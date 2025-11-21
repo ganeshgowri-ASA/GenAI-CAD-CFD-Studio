@@ -29,6 +29,8 @@ from ..ai.sketch_interpreter import SketchInterpreter
 from ..ai.dimension_extractor import DimensionExtractor
 from ..ai.claude_skills import ClaudeSkills
 from ..io.dxf_parser import DXFParser, HAS_EZDXF
+from ..utils.image_validator import ImageValidator, ImageValidationError
+from ..utils.api_usage_tracker import record_api_call
 
 # Optional imports
 try:
@@ -270,73 +272,207 @@ class CADModelGenerator:
             ...     description="Make it 100mm tall"
             ... )
         """
-        logger.info(f"Generating CAD model from image: {image_path}")
+        logger.info("="*80)
+        logger.info(f"STARTING IMAGE-BASED CAD GENERATION")
+        logger.info(f"Image path: {image_path}")
+        logger.info(f"Image type: {image_type}")
+        logger.info(f"Description: {description}")
+        logger.info(f"Engine: {engine}")
+        logger.info("="*80)
 
         if not HAS_CV2 or not self.sketch_interpreter:
+            error_msg = "OpenCV not available for image analysis"
+            logger.error(error_msg)
             return CADGenerationResult(
                 success=False,
-                message="OpenCV not available for image analysis"
+                message=error_msg
             )
 
+        image_path = Path(image_path)
+        validator = ImageValidator()
+        preprocessed_path = None
+
         try:
-            # Step 1: Analyze image
-            image_params = self._analyze_image(image_path, image_type, **kwargs)
+            # ===== STEP 1: VALIDATE IMAGE =====
+            logger.info("STEP 1: Validating image...")
+            try:
+                validation_info = validator.validate_image(
+                    image_path,
+                    check_size=True,
+                    check_format=True,
+                    check_corruption=True
+                )
+                logger.info(f"✓ Image validation passed: {validation_info['width']}x{validation_info['height']} "
+                           f"{validation_info['format']} ({validation_info['file_size_mb']:.2f} MB)")
+            except ImageValidationError as e:
+                error_msg = f"Image validation failed: {str(e)}"
+                logger.error(error_msg)
+                return CADGenerationResult(
+                    success=False,
+                    message=error_msg
+                )
 
-            # Step 2: Use Claude Vision API if available
+            # ===== STEP 2: PREPROCESS IMAGE =====
+            logger.info("STEP 2: Preprocessing image...")
+            try:
+                # Preprocess for OpenCV compatibility
+                preprocessed_path = validator.convert_to_opencv_compatible(image_path)
+                logger.info(f"✓ Image preprocessed: {preprocessed_path}")
+            except ImageValidationError as e:
+                logger.warning(f"Image preprocessing failed, using original: {e}")
+                preprocessed_path = image_path
+
+            # Use preprocessed image for analysis
+            working_image_path = preprocessed_path
+
+            # ===== STEP 3: ANALYZE IMAGE WITH OPENCV =====
+            logger.info("STEP 3: Analyzing image with OpenCV...")
+            try:
+                image_params = self._analyze_image(working_image_path, image_type, **kwargs)
+                logger.info(f"✓ OpenCV analysis completed: {len(image_params)} parameters extracted")
+                logger.debug(f"OpenCV parameters: {json.dumps(image_params, indent=2, default=str)}")
+            except Exception as e:
+                logger.error(f"OpenCV analysis failed: {e}", exc_info=True)
+                image_params = {}
+
+            # ===== STEP 4: ANALYZE WITH CLAUDE VISION API =====
+            logger.info("STEP 4: Analyzing image with Claude Vision API...")
             if self.claude_client and HAS_PIL:
-                claude_params = self._analyze_image_with_claude(image_path, description)
-                # Merge parameters, preferring Claude's analysis
-                image_params.update(claude_params)
+                try:
+                    claude_params = self._analyze_image_with_claude(working_image_path, description)
+                    if claude_params:
+                        logger.info(f"✓ Claude Vision analysis completed: {len(claude_params)} parameters extracted")
+                        logger.debug(f"Claude Vision parameters: {json.dumps(claude_params, indent=2, default=str)}")
+                        # Merge parameters, preferring Claude's analysis
+                        image_params.update(claude_params)
+                    else:
+                        logger.warning("Claude Vision returned no parameters")
+                except Exception as e:
+                    logger.warning(f"Claude Vision analysis failed: {e}", exc_info=True)
+            else:
+                logger.info("Claude Vision API not available, skipping...")
 
-            # Step 3: Merge with text description if provided
+            # ===== STEP 5: MERGE WITH TEXT DESCRIPTION =====
+            logger.info("STEP 5: Processing text description...")
             if description:
-                text_params = self._extract_parameters_from_text(description, **kwargs)
-                # Merge, preferring explicit text parameters
-                for key, value in text_params.items():
-                    if value is not None:
-                        image_params[key] = value
+                try:
+                    text_params = self._extract_parameters_from_text(description, **kwargs)
+                    logger.info(f"✓ Text description processed: {len(text_params)} parameters extracted")
+                    logger.debug(f"Text parameters: {json.dumps(text_params, indent=2, default=str)}")
+                    # Merge, preferring explicit text parameters
+                    for key, value in text_params.items():
+                        if value is not None:
+                            image_params[key] = value
+                except Exception as e:
+                    logger.warning(f"Text description processing failed: {e}", exc_info=True)
+            else:
+                logger.info("No text description provided")
 
-            # Step 4: Validate and generate
-            image_params = self._validate_parameters(image_params)
-            engine = engine or self._select_engine(image_params)
+            # ===== STEP 6: VALIDATE PARAMETERS =====
+            logger.info("STEP 6: Validating extracted parameters...")
+            try:
+                image_params = self._validate_parameters(image_params)
+                logger.info(f"✓ Parameters validated: {json.dumps(image_params, indent=2, default=str)}")
+            except Exception as e:
+                logger.warning(f"Parameter validation warning: {e}")
+
+            # ===== STEP 7: SELECT ENGINE =====
+            logger.info("STEP 7: Selecting CAD engine...")
+            selected_engine = engine or self._select_engine(image_params)
+            logger.info(f"✓ Selected engine: {selected_engine}")
+
+            # ===== STEP 8: GENERATE CAD MODEL =====
+            logger.info("STEP 8: Generating CAD model...")
+            result = None
 
             # Try Zoo first if selected, with fallback to Build123d on 402 error
-            if engine == 'zoo' and self.zoo_connector:
+            if selected_engine == 'zoo' and self.zoo_connector:
                 try:
+                    logger.info("Attempting generation with Zoo.dev...")
                     # Create a combined prompt for Zoo
                     combined_prompt = self._create_prompt_from_params(image_params, description)
+                    logger.debug(f"Zoo.dev prompt: {combined_prompt}")
                     result = self._generate_with_zoo(combined_prompt, image_params, **kwargs)
-                except PaymentRequiredError:
-                    logger.warning("Zoo.dev returned 402 Payment Required, falling back to Build123d + Anthropic Vision")
+                    logger.info(f"✓ Zoo.dev generation {'successful' if result.success else 'failed'}")
+                except PaymentRequiredError as e:
+                    logger.warning(f"Zoo.dev returned 402 Payment Required: {e}")
+                    logger.info("Falling back to Build123d + Anthropic Vision...")
                     # Fallback to Build123d
                     if self.build123d_engine:
                         result = self._generate_with_build123d(image_params, **kwargs)
                         # Add metadata to indicate fallback was used
                         result.metadata['fallback'] = 'build123d_after_zoo_402'
+                        result.metadata['fallback_reason'] = str(e)
                         result.message = "Model generated with Build123d (fallback due to Zoo.dev payment required)"
+                        logger.info("✓ Build123d fallback successful")
                     else:
+                        error_msg = "Zoo.dev requires payment and Build123d is not available as fallback"
+                        logger.error(error_msg)
                         return CADGenerationResult(
                             success=False,
-                            message="Zoo.dev requires payment and Build123d is not available as fallback",
+                            message=error_msg,
                             parameters=image_params
                         )
-            elif engine == 'build123d' and self.build123d_engine:
+                except Exception as e:
+                    logger.error(f"Zoo.dev generation failed: {e}", exc_info=True)
+                    # Try Build123d fallback on any Zoo error
+                    if self.build123d_engine:
+                        logger.info("Attempting Build123d fallback after Zoo.dev error...")
+                        result = self._generate_with_build123d(image_params, **kwargs)
+                        result.metadata['fallback'] = 'build123d_after_zoo_error'
+                        result.metadata['fallback_reason'] = str(e)
+                        logger.info("✓ Build123d fallback successful")
+                    else:
+                        raise
+
+            elif selected_engine == 'build123d' and self.build123d_engine:
+                logger.info("Generating with Build123d...")
                 result = self._generate_with_build123d(image_params, **kwargs)
+                logger.info(f"✓ Build123d generation {'successful' if result.success else 'failed'}")
+
             else:
+                error_msg = f"Engine '{selected_engine}' not available"
+                logger.error(error_msg)
                 return CADGenerationResult(
                     success=False,
-                    message=f"Engine '{engine}' not available",
+                    message=error_msg,
                     parameters=image_params
                 )
 
-            # Step 5: Export
-            if result.success and export_formats:
+            # ===== STEP 9: EXPORT MODEL =====
+            if result and result.success and export_formats:
+                logger.info(f"STEP 9: Exporting to formats: {export_formats}")
                 result = self._export_model(result, export_formats)
+                logger.info(f"✓ Export completed: {len(result.export_paths)} files")
+
+            # Clean up preprocessed image if created
+            if preprocessed_path and preprocessed_path != image_path:
+                try:
+                    preprocessed_path.unlink(missing_ok=True)
+                    logger.debug(f"Cleaned up preprocessed image: {preprocessed_path}")
+                except Exception as e:
+                    logger.warning(f"Failed to clean up preprocessed image: {e}")
+
+            logger.info("="*80)
+            logger.info(f"IMAGE-BASED CAD GENERATION COMPLETED: {'SUCCESS' if result.success else 'FAILED'}")
+            logger.info(f"Result message: {result.message}")
+            logger.info("="*80)
 
             return result
 
         except Exception as e:
-            logger.error(f"Image-based generation failed: {e}", exc_info=True)
+            logger.error("="*80)
+            logger.error(f"IMAGE-BASED GENERATION FAILED WITH EXCEPTION")
+            logger.error(f"Error: {str(e)}")
+            logger.error("="*80, exc_info=True)
+
+            # Clean up preprocessed image if created
+            if preprocessed_path and preprocessed_path != image_path and preprocessed_path.exists():
+                try:
+                    preprocessed_path.unlink(missing_ok=True)
+                except Exception as cleanup_error:
+                    logger.warning(f"Failed to clean up preprocessed image: {cleanup_error}")
+
             return CADGenerationResult(
                 success=False,
                 message=f"Image generation failed: {str(e)}"
