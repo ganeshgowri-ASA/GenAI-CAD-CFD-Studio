@@ -6,7 +6,8 @@ issues, and suggest fixes for problems like invalid volumes, self-intersections,
 and non-manifold geometry.
 """
 
-from typing import List, Optional, Any, Dict
+from __future__ import annotations
+from typing import List, Optional, Any, Dict, TYPE_CHECKING
 from dataclasses import dataclass, field
 import logging
 
