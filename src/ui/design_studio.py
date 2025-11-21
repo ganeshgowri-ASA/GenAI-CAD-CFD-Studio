@@ -95,10 +95,11 @@ def render():
 def render_sidebar():
     """Render sidebar configuration."""
     with st.sidebar:
-        st.header("⚙️ Configuration")
+        st.header("⚙️ Agent Config")
 
         # API Keys
         st.subheader("API Keys")
+        st.caption("Configure API keys to enable CAD generation")
 
         claude_api_key = st.text_input(
             "Anthropic API Key",
@@ -183,6 +184,10 @@ def render_text_input_tab():
     """Render text input tab."""
     st.subheader("📝 Generate from Text Description")
 
+    # Show API key info if generator not initialized
+    if not st.session_state.cad_generator:
+        st.info("💡 **Getting Started:** Configure your API keys in the sidebar (**⚙️ Agent Config**) to enable CAD generation")
+
     st.markdown("""
     Describe your CAD model in natural language. The AI will extract dimensions and generate the model.
 
@@ -244,6 +249,10 @@ def render_text_input_tab():
 def render_image_input_tab():
     """Render image/sketch input tab."""
     st.subheader("🖼️ Generate from Image or Sketch")
+
+    # Show API key info if generator not initialized
+    if not st.session_state.cad_generator:
+        st.info("💡 **Getting Started:** Configure your API keys in the sidebar (**⚙️ Agent Config**) to enable CAD generation")
 
     st.markdown("""
     Upload a hand-drawn sketch, reference photo, or technical image.
@@ -307,6 +316,10 @@ def render_drawing_input_tab():
     """Render technical drawing input tab."""
     st.subheader("📐 Generate from Technical Drawing")
 
+    # Show API key info if generator not initialized
+    if not st.session_state.cad_generator:
+        st.info("💡 **Getting Started:** Configure your API keys in the sidebar (**⚙️ Agent Config**) to enable CAD generation")
+
     st.markdown("""
     Upload technical drawings in DXF, DWG, or PDF format.
     The system will extract geometry and dimensions.
@@ -361,6 +374,10 @@ def render_drawing_input_tab():
 def render_hybrid_input_tab():
     """Render hybrid input tab."""
     st.subheader("🔀 Generate from Multiple Inputs")
+
+    # Show API key info if generator not initialized
+    if not st.session_state.cad_generator:
+        st.info("💡 **Getting Started:** Configure your API keys in the sidebar (**⚙️ Agent Config**) to enable CAD generation")
 
     st.markdown("""
     Combine multiple input sources for comprehensive CAD generation:
@@ -478,7 +495,8 @@ def render_history_tab():
 def generate_from_text(description: str, engine: str, material: str, notes: str):
     """Generate CAD model from text description."""
     if not st.session_state.cad_generator:
-        st.error("❌ Please initialize the CAD generator first!")
+        st.error("❌ **CAD Generator Not Initialized**")
+        st.info("📝 **To enable CAD generation:**\n\n1. Open the sidebar (**⚙️ Agent Config**)\n2. Enter your **Anthropic API Key** (required)\n3. Optionally add **Zoo.dev API Key**\n4. Click **🔧 Initialize Generator**")
         return
 
     if not description:
@@ -522,7 +540,8 @@ def generate_from_text(description: str, engine: str, material: str, notes: str)
 def generate_from_image(uploaded_file, image_type: str, description: str, engine: str):
     """Generate CAD model from image."""
     if not st.session_state.cad_generator:
-        st.error("❌ Please initialize the CAD generator first!")
+        st.error("❌ **CAD Generator Not Initialized**")
+        st.info("📝 **To enable CAD generation:**\n\n1. Open the sidebar (**⚙️ Agent Config**)\n2. Enter your **Anthropic API Key** (required)\n3. Optionally add **Zoo.dev API Key**\n4. Click **🔧 Initialize Generator**")
         return
 
     with st.spinner("🔄 Analyzing image and generating CAD model..."):
@@ -564,7 +583,8 @@ def generate_from_image(uploaded_file, image_type: str, description: str, engine
 def generate_from_drawing(uploaded_file, file_format: str, description: str, engine: str):
     """Generate CAD model from technical drawing."""
     if not st.session_state.cad_generator:
-        st.error("❌ Please initialize the CAD generator first!")
+        st.error("❌ **CAD Generator Not Initialized**")
+        st.info("📝 **To enable CAD generation:**\n\n1. Open the sidebar (**⚙️ Agent Config**)\n2. Enter your **Anthropic API Key** (required)\n3. Optionally add **Zoo.dev API Key**\n4. Click **🔧 Initialize Generator**")
         return
 
     with st.spinner(f"🔄 Parsing {file_format.upper()} and generating CAD model..."):
@@ -615,7 +635,8 @@ def generate_from_hybrid(
 ):
     """Generate CAD model from hybrid inputs."""
     if not st.session_state.cad_generator:
-        st.error("❌ Please initialize the CAD generator first!")
+        st.error("❌ **CAD Generator Not Initialized**")
+        st.info("📝 **To enable CAD generation:**\n\n1. Open the sidebar (**⚙️ Agent Config**)\n2. Enter your **Anthropic API Key** (required)\n3. Optionally add **Zoo.dev API Key**\n4. Click **🔧 Initialize Generator**")
         return
 
     with st.spinner("🔄 Processing hybrid inputs and generating CAD model..."):
