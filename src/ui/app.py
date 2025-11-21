@@ -28,6 +28,9 @@ layout_generator_available = False
 cfd_analysis_available = False
 agent_config_available = False
 project_history_available = False
+rendering_available = False
+mesh_generation_available = False
+cfd_analysis_new_available = False
 
 try:
     from src.ui import design_studio
@@ -64,6 +67,25 @@ try:
     project_history_available = True
 except ImportError as e:
     st.warning(f"Project History module not available: {e}")
+
+# Import new page modules
+try:
+    from src.ui.pages import rendering
+    rendering_available = True
+except ImportError as e:
+    st.warning(f"Rendering module not available: {e}")
+
+try:
+    from src.ui.pages import mesh_generation
+    mesh_generation_available = True
+except ImportError as e:
+    st.warning(f"Mesh Generation module not available: {e}")
+
+try:
+    from src.ui.pages import cfd_analysis as cfd_analysis_new
+    cfd_analysis_new_available = True
+except ImportError as e:
+    st.warning(f"CFD Analysis (new) module not available: {e}")
 
 
 def render_fallback_tab(tab_name: str):
@@ -123,12 +145,106 @@ def main():
         except Exception as e:
             st.warning(f"Error applying custom CSS: {e}")
 
-    # Render sidebar if available
-    if sidebar_available:
-        try:
-            render_sidebar()
-        except Exception as e:
-            st.warning(f"Error rendering sidebar: {e}")
+    # Render enhanced sidebar with API monitoring and model selection
+    with st.sidebar:
+        st.markdown("### ⚙️ Settings")
+
+        # Model selector
+        with st.expander("🤖 AI Model Selection", expanded=False):
+            model_choice = st.selectbox(
+                "Claude Model",
+                options=[
+                    "claude-3-opus-20240229",
+                    "claude-3-5-sonnet-20241022",
+                    "claude-3-haiku-20240307"
+                ],
+                index=1,
+                help="Select Claude model for CAD generation"
+            )
+            st.session_state['selected_model'] = model_choice
+
+        # API Configuration
+        with st.expander("🔑 API Keys", expanded=False):
+            claude_key = st.text_input("Claude API Key", type="password", key="claude_api_key_input")
+            zoo_key = st.text_input("Zoo.dev API Key", type="password", key="zoo_api_key_input")
+            adam_key = st.text_input("Adam.new API Key", type="password", key="adam_api_key_input")
+
+            if st.button("Save API Keys"):
+                if claude_key:
+                    st.session_state['claude_api_key'] = claude_key
+                if zoo_key:
+                    st.session_state['zoo_api_key'] = zoo_key
+                if adam_key:
+                    st.session_state['adam_api_key'] = adam_key
+                st.success("API keys saved!")
+
+        # API Consumption Dashboard
+        with st.expander("📊 API Usage Dashboard", expanded=False):
+            try:
+                from src.utils.api_monitor import get_monitor, APIService
+
+                monitor = get_monitor(create_if_missing=True)
+
+                if monitor:
+                    st.markdown("**Overall Statistics**")
+
+                    col1, col2 = st.columns(2)
+                    with col1:
+                        st.metric("Total Calls", monitor.get_total_calls())
+                        st.metric("Success Rate", f"{monitor.get_overall_success_rate():.1f}%")
+                    with col2:
+                        st.metric("Total Cost", f"${monitor.get_total_cost():.2f}")
+
+                    # Service breakdown
+                    st.markdown("---")
+                    st.markdown("**By Service:**")
+
+                    for service in APIService:
+                        metrics = monitor.get_service_metrics(service)
+                        if metrics.total_calls > 0:
+                            with st.container():
+                                st.markdown(f"**{service.value}**")
+                                col_s1, col_s2, col_s3 = st.columns(3)
+                                with col_s1:
+                                    st.text(f"Calls: {metrics.total_calls}")
+                                with col_s2:
+                                    st.text(f"Success: {metrics.success_rate():.1f}%")
+                                with col_s3:
+                                    st.text(f"Cost: ${metrics.total_cost_usd:.2f}")
+
+                    if st.button("Clear Statistics"):
+                        monitor.clear_session_data()
+                        st.rerun()
+
+                else:
+                    st.info("No API usage data yet")
+
+            except Exception as e:
+                st.error(f"API monitor error: {e}")
+
+        # Export Options
+        with st.expander("💾 Export Options", expanded=False):
+            st.markdown("**Default Export Formats:**")
+
+            export_step = st.checkbox("STEP (.step)", value=True)
+            export_stl = st.checkbox("STL (.stl)", value=True)
+            export_pdf = st.checkbox("PDF Drawing", value=False)
+            export_dxf = st.checkbox("DXF (.dxf)", value=False)
+
+            # Store in session state
+            st.session_state['export_formats'] = {
+                'step': export_step,
+                'stl': export_stl,
+                'pdf': export_pdf,
+                'dxf': export_dxf
+            }
+
+        # Render original sidebar if available
+        if sidebar_available:
+            try:
+                render_sidebar()
+            except Exception as e:
+                st.warning(f"Error rendering sidebar: {e}")
 
     # Main header
     st.markdown("""
@@ -149,9 +265,11 @@ def main():
         "Design Studio": design_studio_available,
         "File Import": file_import_available,
         "Layout Generator": layout_generator_available,
-        "CFD Analysis": cfd_analysis_available,
+        "CFD Analysis": cfd_analysis_available or cfd_analysis_new_available,
         "Agent Config": agent_config_available,
-        "Project History": project_history_available
+        "Project History": project_history_available,
+        "Rendering": rendering_available,
+        "Mesh Generation": mesh_generation_available
     }
 
     available_count = sum(modules_status.values())
@@ -165,12 +283,14 @@ def main():
                 else:
                     st.error(f"❌ {module_name} - Unavailable")
 
-    # Tab container with 6 tabs
+    # Tab container with 9 tabs
     tabs = st.tabs([
         "🎨 Design Studio",
         "📁 File Import",
         "🗺️ Layout Generator",
+        "🔷 Mesh Generation",
         "🌊 CFD Analysis",
+        "🖼️ Rendering",
         "⚙️ Agent Config",
         "📚 Project History"
     ])
@@ -207,7 +327,24 @@ def main():
             render_fallback_tab("Layout Generator")
 
     with tabs[3]:
-        if cfd_analysis_available:
+        if mesh_generation_available:
+            try:
+                mesh_generation.render()
+            except Exception as e:
+                st.error(f"Error rendering Mesh Generation: {e}")
+                render_fallback_tab("Mesh Generation")
+        else:
+            render_fallback_tab("Mesh Generation")
+
+    with tabs[4]:
+        # Use new CFD analysis if available, otherwise fall back to old one
+        if cfd_analysis_new_available:
+            try:
+                cfd_analysis_new.render()
+            except Exception as e:
+                st.error(f"Error rendering CFD Analysis: {e}")
+                render_fallback_tab("CFD Analysis")
+        elif cfd_analysis_available:
             try:
                 cfd_analysis.render()
             except Exception as e:
@@ -216,7 +353,17 @@ def main():
         else:
             render_fallback_tab("CFD Analysis")
 
-    with tabs[4]:
+    with tabs[5]:
+        if rendering_available:
+            try:
+                rendering.render()
+            except Exception as e:
+                st.error(f"Error rendering Rendering: {e}")
+                render_fallback_tab("Rendering")
+        else:
+            render_fallback_tab("Rendering")
+
+    with tabs[6]:
         if agent_config_available:
             try:
                 agent_config.render()
@@ -226,7 +373,7 @@ def main():
         else:
             render_fallback_tab("Agent Config")
 
-    with tabs[5]:
+    with tabs[7]:
         if project_history_available:
             try:
                 project_history.render()

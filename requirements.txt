@@ -102,6 +102,12 @@ pytest-mock>=3.12.0
 coverage>=6.0
 
 # ============================================================================
+# Additional Dependencies for Enhanced Features
+# ============================================================================
+# Enhanced file format support
+dxfwrite>=1.2.2  # DWG export support (limited)
+pygltflib>=1.16.0  # GLTF/GLB support
+
 # Development Tools
 # ============================================================================
 black>=24.0.0
