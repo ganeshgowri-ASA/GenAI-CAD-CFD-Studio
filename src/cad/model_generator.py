@@ -25,6 +25,7 @@ import io
 # Import existing modules
 from .build123d_engine import Build123DEngine, BUILD123D_AVAILABLE
 from .zoo_connector import ZooDevConnector, PaymentRequiredError
+from .image_upload_handler import ImageUploadHandler, ImageType, ImageValidationError
 from ..ai.sketch_interpreter import SketchInterpreter
 from ..ai.dimension_extractor import DimensionExtractor
 from ..ai.claude_skills import ClaudeSkills
@@ -159,6 +160,16 @@ class CADModelGenerator:
         self.dimension_extractor = DimensionExtractor()
         self.claude_skills = ClaudeSkills(api_key=claude_api_key)
 
+        # Initialize image upload handler
+        self.image_handler = None
+        if HAS_PIL:
+            try:
+                self.image_handler = ImageUploadHandler(
+                    output_dir=self.output_dir / 'uploads'
+                )
+            except Exception as e:
+                logger.warning(f"ImageUploadHandler initialization failed: {e}")
+
         logger.info(f"CADModelGenerator initialized (engine={default_engine}, unit={default_unit})")
 
     def generate_from_text(
@@ -270,76 +281,267 @@ class CADModelGenerator:
             ...     description="Make it 100mm tall"
             ... )
         """
-        logger.info(f"Generating CAD model from image: {image_path}")
+        start_time = datetime.now()
+        logger.info(f"Starting CAD model generation from image: {image_path}")
+        logger.info(f"Image type: {image_type}, Engine: {engine or 'auto'}")
 
-        if not HAS_CV2 or not self.sketch_interpreter:
+        # Step 0: Validate image upload with comprehensive checks
+        if not self.image_handler:
+            logger.error("ImageUploadHandler not available (PIL missing)")
             return CADGenerationResult(
                 success=False,
-                message="OpenCV not available for image analysis"
+                message="Image processing not available: PIL (Pillow) library required"
             )
 
         try:
-            # Step 1: Analyze image
-            image_params = self._analyze_image(image_path, image_type, **kwargs)
+            # Map string image_type to ImageType enum
+            image_type_enum = None
+            try:
+                if image_type:
+                    image_type_enum = ImageType(image_type.lower())
+            except ValueError:
+                logger.warning(f"Unknown image type '{image_type}', using default")
+                image_type_enum = ImageType.SKETCH
 
-            # Step 2: Use Claude Vision API if available
+            # Validate and process image
+            logger.info("Step 1/6: Validating image upload...")
+            validation_result = self.image_handler.validate_and_process(
+                image_path,
+                image_type=image_type_enum
+            )
+
+            if not validation_result['is_valid']:
+                error_msg = f"Image validation failed: {', '.join(validation_result['errors'])}"
+                logger.error(error_msg)
+                if validation_result['warnings']:
+                    logger.warning(f"Warnings: {', '.join(validation_result['warnings'])}")
+                return CADGenerationResult(
+                    success=False,
+                    message=error_msg,
+                    metadata={
+                        'validation_errors': validation_result['errors'],
+                        'validation_warnings': validation_result['warnings']
+                    }
+                )
+
+            logger.info(f"Image validation PASSED in {validation_result['validation_time']:.3f}s")
+            logger.info(f"Image metadata: {validation_result['metadata']}")
+
+            # Use validated image
+            validated_image_path = image_path
+            image_metadata = validation_result['metadata']
+
+        except ImageValidationError as e:
+            logger.error(f"Image validation error: {e}", exc_info=True)
+            return CADGenerationResult(
+                success=False,
+                message=f"Image validation failed: {str(e)}"
+            )
+        except Exception as e:
+            logger.error(f"Unexpected error during image validation: {e}", exc_info=True)
+            return CADGenerationResult(
+                success=False,
+                message=f"Image validation exception: {str(e)}"
+            )
+
+        # Step 1: Check for required dependencies
+        if not HAS_CV2 and not self.claude_client:
+            logger.error("Neither OpenCV nor Claude Vision API available for image analysis")
+            return CADGenerationResult(
+                success=False,
+                message="Image analysis not available: OpenCV or Claude API required"
+            )
+
+        try:
+            # Step 2: Analyze image with available tools
+            logger.info("Step 2/6: Analyzing image content...")
+            image_params = {}
+
+            # Try OpenCV-based analysis first (if available)
+            if HAS_CV2 and self.sketch_interpreter:
+                try:
+                    logger.info("Using OpenCV-based sketch interpreter...")
+                    image_params = self._analyze_image(validated_image_path, image_type, **kwargs)
+                    logger.info(f"OpenCV analysis extracted parameters: {image_params}")
+                except Exception as e:
+                    logger.warning(f"OpenCV analysis failed: {e}", exc_info=True)
+                    logger.info("Continuing with Claude Vision API...")
+
+            # Step 3: Use Claude Vision API if available (preferred for accuracy)
             if self.claude_client and HAS_PIL:
-                claude_params = self._analyze_image_with_claude(image_path, description)
-                # Merge parameters, preferring Claude's analysis
-                image_params.update(claude_params)
+                try:
+                    logger.info("Using Claude Vision API for enhanced analysis...")
+                    claude_params = self._analyze_image_with_claude(validated_image_path, description)
+                    if claude_params:
+                        # Merge parameters, preferring Claude's analysis
+                        logger.info(f"Claude Vision extracted parameters: {claude_params}")
+                        image_params.update(claude_params)
+                    else:
+                        logger.warning("Claude Vision API returned no parameters")
+                except Exception as e:
+                    logger.warning(f"Claude Vision API analysis failed: {e}", exc_info=True)
+                    if not image_params:
+                        logger.error("No analysis succeeded - cannot proceed")
+                        return CADGenerationResult(
+                            success=False,
+                            message=f"Image analysis failed: {str(e)}",
+                            metadata={'validation_metadata': image_metadata}
+                        )
 
-            # Step 3: Merge with text description if provided
+            # Step 4: Merge with text description if provided
             if description:
-                text_params = self._extract_parameters_from_text(description, **kwargs)
-                # Merge, preferring explicit text parameters
-                for key, value in text_params.items():
-                    if value is not None:
-                        image_params[key] = value
+                try:
+                    logger.info(f"Step 3/6: Processing text description: '{description}'")
+                    text_params = self._extract_parameters_from_text(description, **kwargs)
+                    logger.info(f"Text description extracted parameters: {text_params}")
+                    # Merge, preferring explicit text parameters
+                    for key, value in text_params.items():
+                        if value is not None:
+                            image_params[key] = value
+                except Exception as e:
+                    logger.warning(f"Text parameter extraction failed: {e}", exc_info=True)
 
-            # Step 4: Validate and generate
-            image_params = self._validate_parameters(image_params)
+            # Add image metadata to parameters
+            image_params['image_metadata'] = image_metadata
+
+            # Step 5: Validate and normalize parameters
+            logger.info("Step 4/6: Validating and normalizing parameters...")
+            try:
+                image_params = self._validate_parameters(image_params)
+                logger.info(f"Final validated parameters: {image_params}")
+            except Exception as e:
+                logger.error(f"Parameter validation failed: {e}", exc_info=True)
+                return CADGenerationResult(
+                    success=False,
+                    message=f"Parameter validation failed: {str(e)}",
+                    parameters=image_params
+                )
+
+            # Step 6: Select engine
             engine = engine or self._select_engine(image_params)
+            logger.info(f"Step 5/6: Selected CAD engine: {engine}")
+
+            # Step 7: Generate model with fallback on 402 error
+            logger.info("Step 6/6: Generating CAD model...")
+            result = None
 
             # Try Zoo first if selected, with fallback to Build123d on 402 error
             if engine == 'zoo' and self.zoo_connector:
                 try:
+                    logger.info("Attempting generation with Zoo.dev...")
                     # Create a combined prompt for Zoo
                     combined_prompt = self._create_prompt_from_params(image_params, description)
+                    logger.debug(f"Zoo prompt: {combined_prompt}")
                     result = self._generate_with_zoo(combined_prompt, image_params, **kwargs)
-                except PaymentRequiredError:
-                    logger.warning("Zoo.dev returned 402 Payment Required, falling back to Build123d + Anthropic Vision")
+                    logger.info("Zoo.dev generation successful")
+                except PaymentRequiredError as e:
+                    logger.warning(f"Zoo.dev returned 402 Payment Required: {e}")
+                    logger.info("Falling back to Build123d + Anthropic Vision...")
                     # Fallback to Build123d
                     if self.build123d_engine:
-                        result = self._generate_with_build123d(image_params, **kwargs)
-                        # Add metadata to indicate fallback was used
-                        result.metadata['fallback'] = 'build123d_after_zoo_402'
-                        result.message = "Model generated with Build123d (fallback due to Zoo.dev payment required)"
+                        try:
+                            result = self._generate_with_build123d(image_params, **kwargs)
+                            # Add metadata to indicate fallback was used
+                            result.metadata['fallback'] = 'build123d_after_zoo_402'
+                            result.metadata['fallback_reason'] = str(e)
+                            result.message = "Model generated with Build123d (fallback due to Zoo.dev payment required)"
+                            logger.info("Fallback to Build123d successful")
+                        except Exception as fallback_error:
+                            logger.error(f"Fallback to Build123d failed: {fallback_error}", exc_info=True)
+                            return CADGenerationResult(
+                                success=False,
+                                message=f"Zoo.dev payment required and Build123d fallback failed: {fallback_error}",
+                                parameters=image_params,
+                                metadata={'validation_metadata': image_metadata}
+                            )
                     else:
+                        logger.error("Build123d not available as fallback")
                         return CADGenerationResult(
                             success=False,
                             message="Zoo.dev requires payment and Build123d is not available as fallback",
-                            parameters=image_params
+                            parameters=image_params,
+                            metadata={'validation_metadata': image_metadata}
                         )
+                except Exception as e:
+                    logger.error(f"Zoo.dev generation failed with unexpected error: {e}", exc_info=True)
+                    # Try Build123d fallback on any Zoo error
+                    if self.build123d_engine:
+                        logger.info("Attempting Build123d fallback after Zoo error...")
+                        try:
+                            result = self._generate_with_build123d(image_params, **kwargs)
+                            result.metadata['fallback'] = 'build123d_after_zoo_error'
+                            result.metadata['fallback_reason'] = str(e)
+                            result.message = f"Model generated with Build123d (fallback due to Zoo.dev error)"
+                            logger.info("Fallback to Build123d successful")
+                        except Exception as fallback_error:
+                            logger.error(f"Fallback to Build123d failed: {fallback_error}", exc_info=True)
+                            return CADGenerationResult(
+                                success=False,
+                                message=f"Both Zoo.dev and Build123d generation failed: {str(e)}, {str(fallback_error)}",
+                                parameters=image_params,
+                                metadata={'validation_metadata': image_metadata}
+                            )
+                    else:
+                        return CADGenerationResult(
+                            success=False,
+                            message=f"Zoo.dev generation failed: {str(e)}",
+                            parameters=image_params,
+                            metadata={'validation_metadata': image_metadata}
+                        )
+
             elif engine == 'build123d' and self.build123d_engine:
-                result = self._generate_with_build123d(image_params, **kwargs)
+                try:
+                    logger.info("Generating with Build123d...")
+                    result = self._generate_with_build123d(image_params, **kwargs)
+                    logger.info("Build123d generation successful")
+                except Exception as e:
+                    logger.error(f"Build123d generation failed: {e}", exc_info=True)
+                    return CADGenerationResult(
+                        success=False,
+                        message=f"Build123d generation failed: {str(e)}",
+                        parameters=image_params,
+                        metadata={'validation_metadata': image_metadata}
+                    )
             else:
+                error_msg = f"Engine '{engine}' not available or not configured"
+                logger.error(error_msg)
                 return CADGenerationResult(
                     success=False,
-                    message=f"Engine '{engine}' not available",
-                    parameters=image_params
+                    message=error_msg,
+                    parameters=image_params,
+                    metadata={'validation_metadata': image_metadata}
                 )
 
-            # Step 5: Export
-            if result.success and export_formats:
-                result = self._export_model(result, export_formats)
+            # Step 8: Export to requested formats
+            if result and result.success and export_formats:
+                try:
+                    logger.info(f"Exporting model to formats: {export_formats}")
+                    result = self._export_model(result, export_formats)
+                    logger.info(f"Export successful: {result.export_paths}")
+                except Exception as e:
+                    logger.error(f"Export failed: {e}", exc_info=True)
+                    result.metadata['export_error'] = str(e)
+
+            # Add timing and validation metadata
+            total_time = (datetime.now() - start_time).total_seconds()
+            result.metadata['generation_time'] = total_time
+            result.metadata['validation_metadata'] = image_metadata
+
+            logger.info(f"Image-based CAD generation completed in {total_time:.3f}s")
+            logger.info(f"Result: {result}")
 
             return result
 
         except Exception as e:
-            logger.error(f"Image-based generation failed: {e}", exc_info=True)
+            total_time = (datetime.now() - start_time).total_seconds()
+            logger.error(f"Image-based generation failed with unexpected exception after {total_time:.3f}s: {e}", exc_info=True)
             return CADGenerationResult(
                 success=False,
-                message=f"Image generation failed: {str(e)}"
+                message=f"Image generation failed: {str(e)}",
+                metadata={
+                    'exception_type': type(e).__name__,
+                    'generation_time': total_time
+                }
             )
 
     def generate_from_drawing(
