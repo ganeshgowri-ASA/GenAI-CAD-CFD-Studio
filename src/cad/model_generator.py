@@ -24,7 +24,7 @@ import io
 
 # Import existing modules
 from .build123d_engine import Build123DEngine, BUILD123D_AVAILABLE
-from .zoo_connector import ZooDevConnector
+from .zoo_connector import ZooDevConnector, PaymentRequiredError
 from ..ai.sketch_interpreter import SketchInterpreter
 from ..ai.dimension_extractor import DimensionExtractor
 from ..ai.claude_skills import ClaudeSkills
@@ -199,9 +199,24 @@ class CADModelGenerator:
             # Step 3: Select engine
             engine = engine or self._select_engine(parameters)
 
-            # Step 4: Generate model
+            # Step 4: Generate model with fallback on 402 error
             if engine == 'zoo' and self.zoo_connector:
-                result = self._generate_with_zoo(description, parameters, **kwargs)
+                try:
+                    result = self._generate_with_zoo(description, parameters, **kwargs)
+                except PaymentRequiredError:
+                    logger.warning("Zoo.dev returned 402 Payment Required, falling back to Build123d")
+                    # Fallback to Build123d
+                    if self.build123d_engine:
+                        result = self._generate_with_build123d(parameters, **kwargs)
+                        # Add metadata to indicate fallback was used
+                        result.metadata['fallback'] = 'build123d_after_zoo_402'
+                        result.message = "Model generated with Build123d (fallback due to Zoo.dev payment required)"
+                    else:
+                        return CADGenerationResult(
+                            success=False,
+                            message="Zoo.dev requires payment and Build123d is not available as fallback",
+                            parameters=parameters
+                        )
             elif engine == 'build123d' and self.build123d_engine:
                 result = self._generate_with_build123d(parameters, **kwargs)
             else:
@@ -285,12 +300,28 @@ class CADModelGenerator:
             image_params = self._validate_parameters(image_params)
             engine = engine or self._select_engine(image_params)
 
-            if engine == 'build123d' and self.build123d_engine:
+            # Try Zoo first if selected, with fallback to Build123d on 402 error
+            if engine == 'zoo' and self.zoo_connector:
+                try:
+                    # Create a combined prompt for Zoo
+                    combined_prompt = self._create_prompt_from_params(image_params, description)
+                    result = self._generate_with_zoo(combined_prompt, image_params, **kwargs)
+                except PaymentRequiredError:
+                    logger.warning("Zoo.dev returned 402 Payment Required, falling back to Build123d + Anthropic Vision")
+                    # Fallback to Build123d
+                    if self.build123d_engine:
+                        result = self._generate_with_build123d(image_params, **kwargs)
+                        # Add metadata to indicate fallback was used
+                        result.metadata['fallback'] = 'build123d_after_zoo_402'
+                        result.message = "Model generated with Build123d (fallback due to Zoo.dev payment required)"
+                    else:
+                        return CADGenerationResult(
+                            success=False,
+                            message="Zoo.dev requires payment and Build123d is not available as fallback",
+                            parameters=image_params
+                        )
+            elif engine == 'build123d' and self.build123d_engine:
                 result = self._generate_with_build123d(image_params, **kwargs)
-            elif engine == 'zoo' and self.zoo_connector:
-                # Create a combined prompt for Zoo
-                combined_prompt = self._create_prompt_from_params(image_params, description)
-                result = self._generate_with_zoo(combined_prompt, image_params, **kwargs)
             else:
                 return CADGenerationResult(
                     success=False,
@@ -470,12 +501,27 @@ class CADModelGenerator:
             all_params = self._validate_parameters(all_params)
             engine = engine or self._select_engine(all_params)
 
-            # Generate model
-            if engine == 'build123d' and self.build123d_engine:
+            # Generate model with fallback on 402 error
+            if engine == 'zoo' and self.zoo_connector:
+                try:
+                    prompt = self._create_prompt_from_params(all_params, inputs.get('text'))
+                    result = self._generate_with_zoo(prompt, all_params, **kwargs)
+                except PaymentRequiredError:
+                    logger.warning("Zoo.dev returned 402 Payment Required, falling back to Build123d")
+                    # Fallback to Build123d
+                    if self.build123d_engine:
+                        result = self._generate_with_build123d(all_params, **kwargs)
+                        # Add metadata to indicate fallback was used
+                        result.metadata['fallback'] = 'build123d_after_zoo_402'
+                        result.message = "Model generated with Build123d (fallback due to Zoo.dev payment required)"
+                    else:
+                        return CADGenerationResult(
+                            success=False,
+                            message="Zoo.dev requires payment and Build123d is not available as fallback",
+                            parameters=all_params
+                        )
+            elif engine == 'build123d' and self.build123d_engine:
                 result = self._generate_with_build123d(all_params, **kwargs)
-            elif engine == 'zoo' and self.zoo_connector:
-                prompt = self._create_prompt_from_params(all_params, inputs.get('text'))
-                result = self._generate_with_zoo(prompt, all_params, **kwargs)
             else:
                 return CADGenerationResult(
                     success=False,
