@@ -1060,6 +1060,10 @@ Return ONLY valid JSON."""
                 metadata={'engine': 'zoo'}
             )
 
+        except PaymentRequiredError:
+            # Re-raise PaymentRequiredError to trigger fallback mechanism
+            logger.warning("Zoo.dev PaymentRequiredError - re-raising for fallback")
+            raise
         except Exception as e:
             logger.error(f"Zoo.dev generation failed: {e}")
             return CADGenerationResult(

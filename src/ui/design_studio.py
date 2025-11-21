@@ -761,12 +761,89 @@ def display_generation_results():
     st.divider()
     st.subheader("📊 Generation Results")
 
+    # ==================== FIX #1: PROMINENT FALLBACK BANNER ====================
+    # Show prominent fallback banner if fallback was used
+    if result.metadata.get('fallback'):
+        fallback_type = result.metadata.get('fallback', '')
+        fallback_reason = result.metadata.get('fallback_reason', 'Zoo.dev unavailable')
+
+        if 'zoo_402' in fallback_type or '402' in fallback_reason:
+            st.warning(f"""
+            ⚠️ **FALLBACK MODE ACTIVE**
+
+            Zoo.dev returned 402 Payment Required. Automatically switched to Build123d + Anthropic Vision fallback.
+
+            **Fallback Reason:** {fallback_reason}
+            """)
+        else:
+            st.info(f"""
+            🔄 **FALLBACK MODE ACTIVE**
+
+            Primary engine failed. Automatically switched to fallback engine.
+
+            **Fallback Reason:** {fallback_reason}
+            """)
+
     # Status
     if result.success:
         st.success(f"✅ {result.message}")
     else:
         st.error(f"❌ {result.message}")
         return
+
+    # ==================== FIX #2: GENERATION METHOD SECTION ====================
+    # Show which engine was used (primary or fallback)
+    st.subheader("🔧 Generation Method")
+
+    engine_used = result.metadata.get('engine', 'Unknown')
+    is_fallback = bool(result.metadata.get('fallback'))
+
+    col1, col2, col3 = st.columns(3)
+
+    with col1:
+        if is_fallback:
+            st.metric(
+                "Engine Used",
+                f"{engine_used.title()} (Fallback)",
+                delta="Fallback Active",
+                delta_color="inverse"
+            )
+        else:
+            st.metric(
+                "Engine Used",
+                f"{engine_used.title()}",
+                delta="Primary Engine",
+                delta_color="normal"
+            )
+
+    with col2:
+        if result.kcl_code:
+            st.metric("Output Type", "KCL Code", delta="Zoo.dev")
+        elif result.part:
+            st.metric("Output Type", "Build123d Part", delta="Native Python")
+        else:
+            st.metric("Output Type", "Unknown", delta="N/A")
+
+    with col3:
+        export_count = len(result.export_paths) if result.export_paths else 0
+        st.metric("Exports", f"{export_count} formats", delta=f"{', '.join(result.export_paths.keys()) if result.export_paths else 'None'}")
+
+    # ==================== FIX #3: FALLBACK REASON DIRECTLY DISPLAYED ====================
+    # Show fallback details prominently (not hidden in metadata)
+    if is_fallback:
+        st.subheader("🔄 Fallback Details")
+
+        fallback_details_col1, fallback_details_col2 = st.columns(2)
+
+        with fallback_details_col1:
+            st.write("**Fallback Type:**")
+            st.code(result.metadata.get('fallback', 'N/A'), language='text')
+
+        with fallback_details_col2:
+            st.write("**Fallback Reason:**")
+            st.code(result.metadata.get('fallback_reason', 'Not specified'), language='text')
+
+        st.info("💡 **Note:** The model was successfully generated using the fallback engine. Quality and features should be comparable to the primary engine.")
 
     # Parameters
     if result.parameters:
