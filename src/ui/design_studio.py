@@ -11,6 +11,7 @@ Multi-modal CAD generation from:
 
 import streamlit as st
 import os
+import logging
 from pathlib import Path
 from typing import Optional, Dict, Any, List
 import tempfile
@@ -25,6 +26,29 @@ try:
 except ImportError as e:
     HAS_CAD_GENERATOR = False
     CAD_IMPORT_ERROR = str(e)
+
+# Import UI components
+try:
+    from .components.viewer_3d import render_3d_viewer, render_model_measurements
+    from .components.api_dashboard import (
+        render_compact_api_metrics,
+        render_model_selector_with_costs,
+        render_export_options,
+        render_cad_options,
+        render_measurement_tools
+    )
+    HAS_UI_COMPONENTS = True
+except ImportError as e:
+    HAS_UI_COMPONENTS = False
+    logging.warning(f"UI components not available: {e}")
+
+# Import PDF exporter
+try:
+    from ..io.pdf_exporter import quick_export_pdf
+    HAS_PDF_EXPORT = True
+except ImportError:
+    HAS_PDF_EXPORT = False
+    logging.warning("PDF export not available")
 
 # Import visualization
 try:
@@ -115,7 +139,14 @@ def render_sidebar():
             key="zoo_api_key_input"
         )
 
+        # Model selector with costs
+        st.divider()
+        if HAS_UI_COMPONENTS:
+            selected_model = render_model_selector_with_costs()
+            st.session_state['selected_claude_model'] = selected_model
+
         # Engine selection
+        st.divider()
         st.subheader("CAD Engine")
         engine = st.selectbox(
             "Default Engine",
@@ -132,7 +163,14 @@ def render_sidebar():
             help="Default unit for dimensions"
         )
 
+        # CAD Options (2D/3D, Part/Assembly selectors)
+        st.divider()
+        if HAS_UI_COMPONENTS:
+            cad_options = render_cad_options()
+            st.session_state['cad_options'] = cad_options
+
         # Export options
+        st.divider()
         st.subheader("Export Options")
         export_formats = st.multiselect(
             "Auto-export formats",
@@ -178,6 +216,11 @@ def render_sidebar():
             st.success("✅ Generator Ready")
         else:
             st.warning("⚠️ Generator not initialized")
+
+        # API Metrics (compact view)
+        st.divider()
+        if HAS_UI_COMPONENTS:
+            render_compact_api_metrics()
 
 
 def render_text_input_tab():
@@ -764,53 +807,276 @@ def display_generation_results():
     # Status
     if result.success:
         st.success(f"✅ {result.message}")
+
+        # Show fallback indicator if used
+        if result.metadata.get('fallback'):
+            st.info(f"ℹ️ **Fallback Used:** {result.metadata['fallback']}")
+            if result.metadata.get('fallback_reason'):
+                st.caption(f"Reason: {result.metadata['fallback_reason']}")
     else:
         st.error(f"❌ {result.message}")
         return
 
-    # Parameters
-    if result.parameters:
-        with st.expander("🔧 Extracted Parameters", expanded=True):
-            st.json(result.parameters)
+    # Create tabs for organized results display
+    results_tabs = st.tabs([
+        "📊 Overview",
+        "👁️ 3D Viewer",
+        "📏 Measurements",
+        "📤 Export",
+        "🔧 Details"
+    ])
 
-    # KCL Code
-    if result.kcl_code:
-        with st.expander("📝 Generated KCL Code"):
-            st.code(result.kcl_code, language='javascript')
+    # ========== OVERVIEW TAB ==========
+    with results_tabs[0]:
+        # Parameters
+        if result.parameters:
+            with st.expander("🔧 Extracted Parameters", expanded=True):
+                # Display in a nicer format
+                col1, col2, col3 = st.columns(3)
+                params = result.parameters
 
-    # Model URL
-    if result.model_url:
-        st.write(f"**Model URL:** {result.model_url}")
+                with col1:
+                    if 'length' in params:
+                        st.metric("Length", f"{params['length']} mm")
+                    if 'object_type' in params or 'type' in params:
+                        obj_type = params.get('object_type', params.get('type', 'N/A'))
+                        st.write(f"**Type:** {obj_type}")
 
-    # Export paths
-    if result.export_paths:
-        st.write("**📁 Exported Files:**")
-        for fmt, path in result.export_paths.items():
+                with col2:
+                    if 'width' in params:
+                        st.metric("Width", f"{params['width']} mm")
+                    if 'material' in params:
+                        st.write(f"**Material:** {params['material']}")
+
+                with col3:
+                    if 'height' in params:
+                        st.metric("Height", f"{params['height']} mm")
+                    if 'radius' in params:
+                        st.metric("Radius", f"{params['radius']} mm")
+
+                # Show all parameters
+                st.json(params)
+
+        # KCL Code
+        if result.kcl_code:
+            with st.expander("📝 Generated KCL Code"):
+                st.code(result.kcl_code, language='javascript')
+
+                # Copy button
+                if st.button("📋 Copy KCL Code", key="copy_kcl"):
+                    st.info("Code copied to clipboard! (Feature requires browser support)")
+
+        # Model URL
+        if result.model_url:
+            st.write(f"**🌐 Model URL:** [{result.model_url}]({result.model_url})")
+
+    # ========== 3D VIEWER TAB ==========
+    with results_tabs[1]:
+        st.markdown("### 👁️ Interactive 3D Model Viewer")
+
+        # Check if we have model data to visualize
+        if result.part and HAS_UI_COMPONENTS:
+            # Try to load STL file if available
+            stl_path = result.export_paths.get('stl')
+            if stl_path and Path(stl_path).exists():
+                try:
+                    render_3d_viewer(file_path=stl_path, title="Generated CAD Model")
+                except Exception as e:
+                    st.error(f"Failed to load 3D viewer: {e}")
+                    st.info("The model was generated successfully but 3D visualization failed.")
+            else:
+                st.info("💡 **Tip:** Export to STL format to enable 3D visualization")
+                st.write("Current exports:", list(result.export_paths.keys()))
+        elif HAS_PLOTLY:
+            st.info("3D viewer available - export your model to STL format for visualization")
+        else:
+            st.warning("3D viewer requires Plotly. Install with: `pip install plotly`")
+
+    # ========== MEASUREMENTS TAB ==========
+    with results_tabs[2]:
+        st.markdown("### 📏 Model Measurements & Analysis")
+
+        if HAS_UI_COMPONENTS:
+            # Show measurement tools
+            render_measurement_tools()
+
+            # Show model measurements if we have STL data
+            stl_path = result.export_paths.get('stl')
+            if stl_path and Path(stl_path).exists():
+                try:
+                    # Load STL and show measurements
+                    from .components.viewer_3d import load_stl_file
+                    model_data = load_stl_file(stl_path)
+                    if model_data:
+                        render_model_measurements(model_data)
+                except Exception as e:
+                    st.warning(f"Could not load measurements: {e}")
+            else:
+                st.info("Export to STL format to see detailed measurements")
+        else:
+            st.info("Measurement tools not available - install required dependencies")
+
+        # Show parameter-based dimensions
+        if result.parameters:
+            st.markdown("---")
+            st.subheader("Parameter-Based Dimensions")
+            params = result.parameters
+
+            dimensions = {}
+            for key in ['length', 'width', 'height', 'radius', 'diameter', 'thickness']:
+                if key in params:
+                    dimensions[key.capitalize()] = f"{params[key]} mm"
+
+            if dimensions:
+                cols = st.columns(len(dimensions))
+                for col, (key, value) in zip(cols, dimensions.items()):
+                    col.metric(key, value)
+
+    # ========== EXPORT TAB ==========
+    with results_tabs[3]:
+        st.markdown("### 📤 Export Options")
+
+        # Existing exports
+        if result.export_paths:
+            st.subheader("📁 Generated Files")
+
+            for fmt, path in result.export_paths.items():
+                col1, col2, col3 = st.columns([2, 2, 1])
+
+                with col1:
+                    st.write(f"**{fmt.upper()}**")
+                    st.caption(f"`{Path(path).name}`")
+
+                with col2:
+                    if Path(path).exists():
+                        file_size = Path(path).stat().st_size
+                        st.caption(f"Size: {file_size / 1024:.1f} KB")
+                    else:
+                        st.caption("File not found")
+
+                with col3:
+                    # Download button
+                    if Path(path).exists():
+                        with open(path, 'rb') as f:
+                            st.download_button(
+                                label="⬇️",
+                                data=f.read(),
+                                file_name=Path(path).name,
+                                mime='application/octet-stream',
+                                key=f"download_{fmt}_{hash(path)}",
+                                use_container_width=True
+                            )
+
+        # PDF Export
+        st.divider()
+        st.subheader("📄 PDF Technical Drawing")
+
+        if HAS_PDF_EXPORT:
             col1, col2 = st.columns([3, 1])
+
             with col1:
-                st.write(f"- **{fmt.upper()}**: `{path}`")
+                st.write("Export a technical drawing with dimensions and title block")
+                pdf_title = st.text_input(
+                    "Drawing Title",
+                    value="CAD Model",
+                    key="pdf_title"
+                )
+
             with col2:
-                # Offer download if file exists
-                if Path(path).exists():
-                    with open(path, 'rb') as f:
-                        st.download_button(
-                            label=f"⬇️ {fmt.upper()}",
-                            data=f.read(),
-                            file_name=Path(path).name,
-                            mime='application/octet-stream',
-                            key=f"download_{fmt}"
+                st.write("")  # Spacing
+                st.write("")  # Spacing
+                if st.button("📄 Export PDF", type="primary", use_container_width=True, key="export_pdf_btn"):
+                    try:
+                        # Create PDF export
+                        output_path = Path(st.session_state.cad_generator.output_dir) / f"{pdf_title.replace(' ', '_')}.pdf"
+
+                        # Get first image if available (for image-based generations)
+                        image_path = None
+                        if result.metadata.get('image_metadata'):
+                            # Check if we have the original image
+                            pass
+
+                        success = quick_export_pdf(
+                            output_path=str(output_path),
+                            title=pdf_title,
+                            dimensions=result.parameters,
+                            description=result.message
                         )
 
-    # Metadata
-    if result.metadata:
-        with st.expander("ℹ️ Metadata"):
-            st.json(result.metadata)
+                        if success:
+                            st.success(f"✅ PDF exported: {output_path.name}")
 
-    # 3D Preview (if available)
-    if result.part and HAS_PLOTLY:
-        with st.expander("👁️ 3D Preview", expanded=True):
-            st.info("3D preview coming soon - currently showing placeholder")
-            # TODO: Add actual 3D visualization using plotly or pyvista
+                            # Offer download
+                            with open(output_path, 'rb') as f:
+                                st.download_button(
+                                    label="⬇️ Download PDF",
+                                    data=f.read(),
+                                    file_name=output_path.name,
+                                    mime='application/pdf',
+                                    key="download_pdf"
+                                )
+                        else:
+                            st.error("Failed to export PDF")
+
+                    except Exception as e:
+                        st.error(f"PDF export failed: {e}")
+        else:
+            st.warning("PDF export requires ReportLab. Install with: `pip install reportlab`")
+
+    # ========== DETAILS TAB ==========
+    with results_tabs[4]:
+        st.markdown("### 🔧 Technical Details")
+
+        # Metadata
+        if result.metadata:
+            st.subheader("ℹ️ Generation Metadata")
+
+            # Show key metadata in metrics
+            col1, col2, col3 = st.columns(3)
+
+            with col1:
+                engine = result.metadata.get('engine', 'Unknown')
+                st.metric("Engine", engine)
+
+            with col2:
+                gen_time = result.metadata.get('generation_time', 0)
+                if gen_time:
+                    st.metric("Generation Time", f"{gen_time:.2f}s")
+
+            with col3:
+                if result.metadata.get('fallback'):
+                    st.metric("Fallback", "Yes")
+
+            # Show full metadata
+            with st.expander("View Full Metadata"):
+                st.json(result.metadata)
+
+        # Generation timestamp
+        st.write(f"**Generated:** {result.timestamp}")
+
+        # Image validation metadata if available
+        if result.metadata.get('validation_metadata'):
+            st.subheader("🖼️ Image Validation")
+            validation_meta = result.metadata['validation_metadata']
+
+            col1, col2, col3 = st.columns(3)
+            with col1:
+                st.write(f"**Format:** {validation_meta.get('format', 'N/A')}")
+                st.write(f"**Mode:** {validation_meta.get('mode', 'N/A')}")
+
+            with col2:
+                size = validation_meta.get('size', (0, 0))
+                st.write(f"**Dimensions:** {size[0]}×{size[1]}")
+                file_size = validation_meta.get('file_size', 0)
+                st.write(f"**File Size:** {file_size / 1024:.1f} KB")
+
+            with col3:
+                quality = validation_meta.get('quality', {})
+                if quality.get('quality_score'):
+                    st.write(f"**Quality Score:** {quality['quality_score']:.2f}")
+
+            with st.expander("View Full Validation Data"):
+                st.json(validation_meta)
 
 
 if __name__ == "__main__":
