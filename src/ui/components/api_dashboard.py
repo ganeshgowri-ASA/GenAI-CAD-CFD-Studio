@@ -357,12 +357,12 @@ def render_export_options() -> dict:
 
     export_settings = {}
 
-    # Format selection
+    # Format selection - Added DWG format for AutoCAD compatibility (Issue #15 fix)
     export_settings['formats'] = st.multiselect(
         "Export Formats",
-        options=["STEP", "STL", "DXF", "PDF", "GLTF"],
+        options=["STEP", "STL", "DXF", "DWG", "PDF", "GLTF"],
         default=["STEP"],
-        help="Select one or more formats to export"
+        help="Select one or more formats to export (DWG for AutoCAD compatibility)"
     )
 
     # Additional options
